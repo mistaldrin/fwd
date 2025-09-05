@@ -54,7 +54,7 @@ class STS:
         if configs['file_size'] != 0:
             size = [configs['file_size'], configs['size_limit']]
         return bot, configs['caption'], configs['forward_tag'], {'chat_id': k.FROM, 'limit': k.limit, 'offset': k.skip, 'filters': filters,
-                'keywords': configs['keywords'], 'media_size': size, 'extensions': configs['extension'], 'skip_duplicate': duplicate}, configs['protect'], button
+                'keywords': configs['keywords'], 'media_size': size, 'extensions': configs['extension'], 'skip_duplicate': duplicate, 'forward_delay': configs['forward_delay']}, configs['protect'], button
         
 
 def get_readable_time(seconds: int) -> str:
@@ -74,9 +74,3 @@ def get_readable_time(seconds: int) -> str:
     seconds = int(seconds)
     result += f"{seconds}s"
     return result
-
-
-
-# MrSyD
-# Telegram Channel @Bot_Cracker
-# Developer @syd_xyz
