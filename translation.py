@@ -1,4 +1,3 @@
-
 import os
 from config import Config
 
@@ -18,6 +17,7 @@ class Translation(object):
 ⏣ __/unequify - Dᴇʟᴇᴛᴇ Dᴜᴩʟɪᴄᴀᴛᴇ Mᴇꜱꜱᴀɢᴇꜱ Iɴ Cʜᴀɴɴᴇʟꜱ__
 ⏣ __/settings - Cᴏɴꜰɪɢᴜʀᴇ Yᴏᴜʀ Sᴇᴛᴛɪɴɢꜱ__
 ⏣ __/reset - Rᴇꜱᴇᴛ Yᴏᴜʀ Sᴇᴛᴛɪɴɢꜱ__
+⏣ __/forwardelay - Sᴇᴛ ᴀ ᴄᴜꜱᴛᴏᴍ ꜰᴏʀᴡᴀʀᴅɪɴɢ ᴅᴇʟᴀʏ__
 
 <b><u>≬≬ Fᴇᴀᴛᴜʀᴇꜱ :</b></u>
 ► __Fᴏʀᴡᴀʀᴅ Mᴇꜱꜱᴀɢᴇ Fʀᴏᴍ Pᴜʙʟɪᴄ Cʜᴀɴɴᴇʟ To Yᴏᴜʀ Cʜᴀɴɴᴇʟ Wɪᴛʜᴏᴜᴛ Aᴅᴍɪɴ Peᴇʀᴍɪꜱꜱɪᴏɴ. Iꜰ Tʜᴇ Cʜᴀɴɴᴇʟ Iꜱ Pʀɪᴠᴀᴛᴇ Nᴇᴇᴅ Aᴅᴍɪɴ Pᴇʀᴍɪꜱꜱɪᴏɴ, Bᴇᴛᴇʀ Tᴏ Uꜱᴇ UꜱᴇʀBᴏᴛ__
@@ -106,16 +106,13 @@ Bᴇꜰᴏʀ Fᴏʀᴡᴀʀᴅɪɴɢ Tʜᴇ Mᴇꜱꜱᴀɢᴇꜱ Cʟɪᴄᴋ T�
 <i>° Iꜰ Tʜᴇ <b>Sᴏᴜʀᴄᴇ Cʜᴀᴛ</b> Iꜱ Pʀɪᴠᴀᴛᴇ Yᴏᴜʀ Userbot Mᴜꜱᴛ Bᴇ Mᴇᴍʙᴇʀ Or Yᴏᴜʀ Bᴏᴛ Mᴜꜱᴛ Bᴇ Aᴅᴍɪɴ Iɴ Tʜᴇʀᴇ Aʟꜱᴏ</i>
 
 <b>Iꜰ Tʜᴇ Aʙᴏᴠᴇ Iꜱ Cʜᴇᴄᴋᴇᴅ Tʜᴇɴ Tʜᴇ Yᴇꜱ Bᴜᴛᴛᴏɴ Cᴀɴ Bᴇ Cʟɪᴄᴋᴇᴅ</b>"""
+  
+  FORWARDELAY_TXT = """<b><u>Set Forwarding Delay</u></b>
 
+Use this command to set a custom delay (in seconds) between forwarded messages to avoid Telegram's flood limits.
 
+<b>Usage:</b> <code>/forwardelay [delay_in_seconds]</code>
+<b>Example:</b> <code>/forwardelay 0.5</code> (sets a half-second delay)
+<b>Example:</b> <code>/forwardelay 2</code> (sets a two-second delay)
 
-
-
-
-
-
-
-
-# MrSyD
-# Telegram Channel @Bot_Cracker
-# Developer @syd_xyz
+The default delay is 1 second."""
