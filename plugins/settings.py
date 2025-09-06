@@ -108,7 +108,7 @@ async def settings_query(bot, query):
                  "Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Uᴩᴅᴀᴛᴇᴅ ✓",
                  reply_markup=InlineKeyboardMarkup(buttons))
      except asyncio.exceptions.TimeoutError:
-         await text.edit_text('Pʀᴏᴄᴇꜱꜱ Hᴀꜱ Bᴇᴇɴ Cᴀɴᴄᴇʟʟᴇᴅ Aᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ Dᴜᴇ Tᴏ Nᴏ Rᴇꜱᴩᴏɴꜱᴇ!', reply_markup=InlineKeyboardMarkup(buttons))
+         await text.edit_text('Pʀᴏᴄᴇꜱꜱ Hᴀꜱ Bᴇᴇɴ Cᴀɴᴄᴇʟʟᴇᴅ Aᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ DᴜE Tᴏ Nᴏ Rᴇꜱᴩᴏɴꜱᴇ!', reply_markup=InlineKeyboardMarkup(buttons))
   
   elif type.startswith("editbot"): 
      bot_id = int(type.split('_')[1])
@@ -177,7 +177,7 @@ async def settings_query(bot, query):
   elif type=="deletecaption":
      await update_configs(user_id, 'caption', None)
      await query.message.edit_text(
-        "Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Uᴩᴅᴀᴛᴇᴅ ✓",
+        "Successfully Button Deleted",
         reply_markup=InlineKeyboardMarkup(buttons))
                               
   elif type=="addcaption":
@@ -261,7 +261,7 @@ async def settings_query(bot, query):
      else:
         buttons.append([InlineKeyboardButton('↳ See URL', 
                       callback_data="settings#seeurl")])
-        buttons[-1].append(InlineKeyboardButton('↳ Remove URL', 
+        buttons[-1].append(InlineKeyboardButton('↳ Rᴇᴍᴏᴠᴇ URL', 
                       callback_data="settings#deleteurl"))
      buttons.append([InlineKeyboardButton('⇇ Bᴀᴄᴋ', 
                       callback_data="settings#main")])
@@ -319,7 +319,7 @@ async def settings_query(bot, query):
     size = settings.get('file_size', 0)
     i, limit = size_limit(settings['size_limit'])
     await query.message.edit_text(
-       f'<b><u>Sɪᴢᴇ Lɪᴍɪᴛ</u></b>\n\nYᴏᴜ Cᴀɴ Sᴇᴛ Fɪʟᴇ Sɪᴢᴇ Lɪᴍɪᴛ To Fᴏᴡᴀʀᴅ\n\nSᴛᴀᴛᴜꜱ : Fɪʟᴇꜱ Wɪᴛʜ {limit} `{size} ᴍʙ` Wɪʟʟ Bᴇ Fᴏʀᴡᴀʀᴅ',
+       f'<b><u>Sɪᴢᴇ Lɪᴍɪᴛ</u></b>\n\nYᴏᴜ Cᴀɴ Sᴇᴛ Fɪʟᴇ Sɪᴢᴇ Lɪᴍɪᴛ To FᴏWᴀʀᴅ\n\nSᴛᴀᴛᴜꜱ : Fɪʟᴇꜱ Wɪᴛʜ {limit} `{size} ᴍʙ` Wɪʟʟ Bᴇ Fᴏʀᴡᴀʀᴅ',
        reply_markup=size_button(size))
   
   elif type.startswith("update_size"):
@@ -329,7 +329,7 @@ async def settings_query(bot, query):
     await update_configs(user_id, 'file_size', size)
     i, limit = size_limit((await get_configs(user_id))['size_limit'])
     await query.message.edit_text(
-       f'<b><u>Sɪᴢᴇ Lɪᴍɪᴛ</u></b>\n\nYᴏᴜ Fᴏᴡᴀʀᴅ Tᴏ Fᴏᴡᴀʀᴅ\n\nSᴛᴀᴛᴜꜱ : Fɪʟᴇꜱ Wɪᴛʜ {limit} `{size} ᴍʙ` Wɪʟʟ Fᴏʀᴡᴀʀᴅ',
+       f'<b><u>Sɪᴢᴇ Lɪᴍɪᴛ</u></b>\n\nYᴏᴜ FᴏWᴀʀᴅ Tᴏ FᴏWᴀʀᴅ\n\nSᴛᴀᴛᴜꜱ : Fɪʟᴇꜱ Wɪᴛʜ {limit} `{size} ᴍʙ` Wɪʟʟ FᴏRᴡᴀʀᴅ',
        reply_markup=size_button(int(size)))
   
   elif type.startswith('update_limit'):
@@ -363,7 +363,7 @@ async def settings_query(bot, query):
     extensions = (await get_configs(user_id))['extension']
     btn = extract_btn(extensions)
     btn.append([InlineKeyboardButton('⨁ Add ⨁', 'settings#add_extension')])
-    btn.append([InlineKeyboardButton('Remove All', 'settings#rmve_all_extension')])
+    btn.append([InlineKeyboardButton('Rᴇᴍᴏᴠᴇ Aʟʟ', 'settings#rmve_all_extension')])
     btn.append([InlineKeyboardButton('⇇ Bᴀᴄᴋ', 'settings#main')])
     await query.message.edit_text(
         text='<b><u>Extensions</u></b>\n\nFiles With These Extiontions Will Not Forward',
