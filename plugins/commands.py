@@ -1,4 +1,3 @@
-
 import os
 import sys
 import asyncio 
@@ -9,6 +8,7 @@ from platform import python_version
 from translation import Translation
 from pyrogram import Client, filters, enums, __version__ as pyrogram_version
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaDocument
+from .test import update_configs
 
 SYD = ["https://files.catbox.moe/mq4f9j.jpg", "https://files.catbox.moe/mq4f9j.jpg"]
 
@@ -77,13 +77,28 @@ async def helpcb(bot, query):
             [[
             InlineKeyboardButton('∿ Hᴏᴡ To Uꜱᴇ Mᴇ ∿', callback_data='how_to_use')
             ],[
-            InlineKeyboardButton('⛭ SᴇᴛᴛɪɴɢS ⛭', callback_data='settings#main'),
+            InlineKeyboardButton('⛭ SᴇᴛᴛɪɴGS ⛭', callback_data='settings#main'),
             InlineKeyboardButton('∗ SᴛᴀᴛS ∗', callback_data='status')
             ],[
             InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data='back')
             ]]
         ))
 
+@Client.on_message(filters.private & filters.command(["forwardelay", "fd"]))
+async def forward_delay(client, message):
+    if len(message.command) < 2:
+        return await message.reply_text(Translation.FORWARDELAY_TXT)
+    
+    try:
+        delay = float(message.command[1])
+        if delay < 0:
+            return await message.reply_text("The delay must be a positive number.")
+        
+        user_id = message.from_user.id
+        await update_configs(user_id, 'forward_delay', delay)
+        await message.reply_text(f"Forwarding delay set to {delay} seconds.")
+    except ValueError:
+        await message.reply_text("Invalid input. Please provide a number.")
 
 
 @Client.on_callback_query(filters.regex(r'^how_to_use'))
@@ -127,4 +142,3 @@ async def status(bot, query):
         parse_mode=enums.ParseMode.HTML,
         disable_web_page_preview=True,
     )
-   
