@@ -42,9 +42,17 @@ async def pub_(bot, message):
     if i.TO in temp.IS_FRWD_CHAT:
       return await message.answer("In Target Chat A Task Is Progressing. Please Wait Until Task Complete", show_alert=True)
     m = await msg_edit(message.message, "Verifying Your Data's, Please Wait.")
-    _bot, caption, forward_tag, data, protect, button = await sts.get_data(user)
+    _bot = await db.get_bot(user, bot_id)
     if not _bot:
       return await msg_edit(m, "You Didn't Added Any Bot. Please Add A Bot Uꜱɪɴɢ /settings !", wait=True)
+    
+    configs = await db.get_configs(user)
+    caption = configs.get('caption')
+    forward_tag = configs.get('forward_tag')
+    data = configs.get('filters')
+    protect = configs.get('protect')
+    button = configs.get('button')
+    
     try:
       client = await start_clone_bot(CLIENT.client(_bot))
     except Exception as e:  
@@ -74,7 +82,7 @@ async def pub_(bot, message):
     await db.add_frwd(user)
     await send(client, user, "Fᴏʀᴡᴀʀᴅɪɴɢ Sᴛᴀʀᴛᴇᴅ 🗝️")
     sts.add(time=True)
-    forward_delay = data.get('forward_delay', 1.0)
+    forward_delay = configs.get('forward_delay', 1.0)
     await msg_edit(m, "Pʀᴏᴄᴄᴇꜱꜱɪɴɢ...") 
     temp.IS_FRWD_CHAT.append(i.TO)
     temp.lock[user] = locked = True
