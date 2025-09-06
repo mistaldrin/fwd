@@ -30,7 +30,8 @@ async def run(bot, message):
     
     # Create buttons for each bot
     for _bot in bots:
-        buttons.append([InlineKeyboardButton(f"🤖 {_bot['name']}", callback_data=f"fwd_bot_{_bot['id']}")])
+        text = f"🤖 {_bot['name']}" if _bot['is_bot'] else f"👤 {_bot['name']}"
+        buttons.append([InlineKeyboardButton(text, callback_data=f"fwd_bot_{_bot['id']}")])
     buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="close_btn")])
 
     await message.reply_text("<b><u>Cʜᴏᴏꜱᴇ Bᴏᴛ</u></b>\n\nCʜᴏᴏꜱᴇ Tʜᴇ Bᴏᴛ Yᴏᴜ Wᴀɴᴛ To Uꜱᴇ Fᴏʀ Fᴏʀᴡᴀʀᴅɪɴɢ.", reply_markup=InlineKeyboardMarkup(buttons))
