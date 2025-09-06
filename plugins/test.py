@@ -68,7 +68,7 @@ class CLIENT:
        'token': bot_token,
        'username': _bot.username 
      }
-     await db.add_bot(details)
+     await db.add_bot(user_id, details)
      return True
     
   async def add_session(self, bot, message):
@@ -93,7 +93,7 @@ class CLIENT:
        'session': msg.text,
        'username': user.username
      }
-     await db.add_bot(details)
+     await db.add_bot(user_id, details)
      return True
     
 @Client.on_message(filters.private & filters.command('reset'))
@@ -128,11 +128,14 @@ async def resetall(bot, message):
   
 async def get_configs(user_id):
   configs = await db.get_configs(user_id)
+  # Add default for the new forward_delay setting
+  if 'forward_delay' not in configs:
+      configs['forward_delay'] = 1.0 
   return configs
 
 async def update_configs(user_id, key, value):
   current = await db.get_configs(user_id)
-  if key in ['caption', 'duplicate', 'db_uri', 'forward_tag', 'protect', 'file_size', 'size_limit', 'extension', 'keywords', 'button']:
+  if key in ['caption', 'duplicate', 'db_uri', 'forward_tag', 'protect', 'file_size', 'size_limit', 'extension', 'keywords', 'button', 'forward_delay']:
      current[key] = value
   else: 
      current['filters'][key] = value
