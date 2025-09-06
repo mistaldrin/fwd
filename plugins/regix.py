@@ -29,10 +29,12 @@ TEXT = Translation.TEXT
 async def pub_(bot, message):
     user = message.from_user.id
     temp.CANCEL[user] = False
-    frwd_id = message.data.split("_")[2]
+    frwd_id, bot_id = message.data.split("_")[2:]
+    bot_id = int(bot_id)
+
     if temp.lock.get(user) and str(temp.lock.get(user))=="True":
       return await message.answer("Pʟᴇᴀꜱᴇ Wᴀɪᴛ Uɴᴛɪʟ Pʀᴇᴠɪᴏᴜꜱ Tᴀꜱᴋ Cᴏᴍᴩʟᴇᴛᴇ !", show_alert=True)
-    sts = STS(frwd_id)
+    sts = STS(frwd_id, bot_id)
     if not sts.verify():
       await message.answer("Your Are Clicking On My Old Button", show_alert=True)
       return await message.message.delete()
@@ -42,7 +44,7 @@ async def pub_(bot, message):
     m = await msg_edit(message.message, "Verifying Your Data's, Please Wait.")
     _bot, caption, forward_tag, data, protect, button = await sts.get_data(user)
     if not _bot:
-      return await msg_edit(m, "You Didn't Added Any Bot. Please Add A Bot Using /settings !", wait=True)
+      return await msg_edit(m, "You Didn't Added Any Bot. Please Add A Bot Uꜱɪɴɢ /settings !", wait=True)
     try:
       client = await start_clone_bot(CLIENT.client(_bot))
     except Exception as e:  
@@ -72,7 +74,7 @@ async def pub_(bot, message):
     await db.add_frwd(user)
     await send(client, user, "Fᴏʀᴡᴀʀᴅɪɴɢ Sᴛᴀʀᴛᴇᴅ 🗝️")
     sts.add(time=True)
-    sleep = 0 if _bot['is_bot'] else 1
+    forward_delay = data.get('forward_delay', 1.0)
     await msg_edit(m, "Pʀᴏᴄᴄᴇꜱꜱɪɴɢ...") 
     temp.IS_FRWD_CHAT.append(i.TO)
     temp.lock[user] = locked = True
@@ -119,14 +121,14 @@ async def pub_(bot, message):
                         or completed <= 100): 
                       await forward(client, MSG, m, sts, protect)
                       sts.add('total_files', notcompleted)
-                      await asyncio.sleep(10)
+                      await asyncio.sleep(forward_delay)
                       MSG = []
                 else:
                    new_caption = custom_caption(message, caption)
                    details = {"msg_id": message.id, "media": media(message), "caption": new_caption, 'button': button, "protect": protect}
                    await copy(client, details, m, sts)
                    sts.add('total_files')
-                   await asyncio.sleep(sleep) 
+                   await asyncio.sleep(forward_delay) 
         except Exception as e:
             await msg_edit(m, f'<b>Error :</b>\n<code>{e}</code>', wait=True)
             temp.IS_FRWD_CHAT.remove(sts.TO)
