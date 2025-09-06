@@ -17,6 +17,7 @@ async def settings(client, message):
         quote=True
     )
 
+    
 @Client.on_callback_query(filters.regex(r'^settings'))
 async def settings_query(bot, query):
   user_id = query.from_user.id
@@ -30,15 +31,15 @@ async def settings_query(bot, query):
        
   elif type=="bots":
      buttons = [] 
-     _bot = await db.get_bot(user_id)
-     if _bot is not None:
-        buttons.append([InlineKeyboardButton(_bot['name'],
-                         callback_data=f"settings#editbot")])
-     else:
-        buttons.append([InlineKeyboardButton('⨁ Aᴅᴅ Bᴏᴛ ⨁', 
-                         callback_data="settings#addbot")])
-        buttons.append([InlineKeyboardButton('⨁ Aᴅᴅ Uꜱᴇʀ Bᴏᴛ ⨁', 
-                         callback_data="settings#adduserbot")])
+     bots = await db.get_all_bots(user_id)
+     if bots:
+        for _bot in bots:
+            text = f"🤖 {_bot['name']}" if _bot['is_bot'] else f"👤 {_bot['name']}"
+            buttons.append([InlineKeyboardButton(text, callback_data=f"settings#editbot_{_bot['id']}")])
+     buttons.append([InlineKeyboardButton('⨁ Aᴅᴅ Bᴏᴛ ⨁', 
+                      callback_data="settings#addbot")])
+     buttons.append([InlineKeyboardButton('⨁ Aᴅᴅ Uꜱᴇʀ Bᴏᴛ ⨁', 
+                      callback_data="settings#adduserbot")])
      buttons.append([InlineKeyboardButton('⇇ Bᴀᴄᴋ', 
                       callback_data="settings#main")])
      await query.message.edit_text(
@@ -109,18 +110,20 @@ async def settings_query(bot, query):
      except asyncio.exceptions.TimeoutError:
          await text.edit_text('Pʀᴏᴄᴇꜱꜱ Hᴀꜱ Bᴇᴇɴ Cᴀɴᴄᴇʟʟᴇᴅ Aᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ Dᴜᴇ Tᴏ Nᴏ Rᴇꜱᴩᴏɴꜱᴇ!', reply_markup=InlineKeyboardMarkup(buttons))
   
-  elif type=="editbot": 
-     bot = await db.get_bot(user_id)
-     TEXT = Translation.BOT_DETAILS if bot['is_bot'] else Translation.USER_DETAILS
-     buttons = [[InlineKeyboardButton('⛒ Rᴇᴍᴏᴠᴇ ⛒', callback_data=f"settings#removebot")
+  elif type.startswith("editbot"): 
+     bot_id = int(type.split('_')[1])
+     _bot = await db.get_bot(user_id, bot_id)
+     TEXT = Translation.BOT_DETAILS if _bot['is_bot'] else Translation.USER_DETAILS
+     buttons = [[InlineKeyboardButton('⛒ Rᴇᴍᴏᴠᴇ ⛒', callback_data=f"settings#removebot_{_bot['id']}")
                ],
                [InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data="settings#bots")]]
      await query.message.edit_text(
-        TEXT.format(bot['name'], bot['id'], bot['username']),
+        TEXT.format(_bot['name'], _bot['id'], _bot['username']),
         reply_markup=InlineKeyboardMarkup(buttons))
                                              
-  elif type=="removebot":
-     await db.remove_bot(user_id)
+  elif type.startswith("removebot"):
+     bot_id = int(type.split('_')[1])
+     await db.remove_bot(user_id, bot_id)
      await query.message.edit_text(
         "Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Uᴩᴅᴀᴛᴇᴅ ✓",
         reply_markup=InlineKeyboardMarkup(buttons))
@@ -216,7 +219,7 @@ async def settings_query(bot, query):
      buttons.append([InlineKeyboardButton('⇇ Bᴀᴄᴋ', 
                       callback_data="settings#main")])
      await query.message.edit_text(
-        "<b><u>Cᴜꜱᴛᴏᴍ Bᴜᴛᴛᴏɴ</b></u>\n\nYᴏᴜ Cᴀɴ Sᴇᴛ Aɴ Iɴʟɪɴᴇ Bᴜᴛᴛᴏɴ To Mᴇꜱꜱᴀɢᴇꜱ Wʜɪᴄʜ Wɪʟʟ Bᴇ Fᴏʀᴡᴀʀᴅᴇᴅ.\n\n<b><u>Fᴏʀᴍᴀᴛ :</b></u>\n`[Mᴏᴅ Mᴏᴠɪᴇᴢ x][buttonurl:https://t.me/Mod_Moviez_X]`\n",
+        "<b><u>Cᴜꜱᴛᴏᴍ Bᴜᴛᴛᴏɴ</b></u>\n\nYᴏᴜ Cᴀɴ Sᴇᴛ Aɴ IɴLɪɴᴇ Bᴜᴛᴛᴏɴ To Mᴇꜱꜱᴀɢᴇꜱ Wʜɪᴄʜ Wɪʟʟ Bᴇ Fᴏʀᴡᴀʀᴅᴇᴅ.\n\n<b><u>Fᴏʀᴍᴀᴛ :</b></u>\n`[Mᴏᴅ Mᴏᴠɪᴇᴢ x][buttonurl:https://t.me/Mod_Moviez_X]`\n",
         reply_markup=InlineKeyboardMarkup(buttons))
   
   elif type=="addbutton":
@@ -424,7 +427,7 @@ def main_buttons():
        InlineKeyboardButton('Bᴜᴛᴛᴏɴ ⚹',
                     callback_data=f'settings#button')
        ],[
-       InlineKeyboardButton('⛭ Exᴛʀꜱ Sᴇᴛᴛɪɴɢꜱ ⛭',
+       InlineKeyboardButton('⛭ Exᴛʀꜱ SᴇᴛᴛɪɴGS ⛭',
                     callback_data='settings#nextfilters')
        ],[      
        InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data='back')
