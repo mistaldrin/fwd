@@ -1,10 +1,3 @@
-# MrSyD
-# Telegram Channel @Bot_Cracker
-# Developer @syd_xyz
-
-
-
-
 import time as tm
 from database import db 
 from .test import parse_buttons
@@ -12,18 +5,19 @@ from .test import parse_buttons
 STATUS = {}
 
 class STS:
-    def __init__(self, id):
+    def __init__(self, id, bot_id=None):
         self.id = id
         self.data = STATUS
+        self.bot_id = bot_id
     
     def verify(self):
         return self.data.get(self.id)
     
-    def store(self, From, to,  skip, limit):
+    def store(self, From, to,  skip, limit, bot_id):
         self.data[self.id] = {"FROM": From, 'TO': to, 'total_files': 0, 'skip': skip, 'limit': limit,
-                      'fetched': skip, 'filtered': 0, 'deleted': 0, 'duplicate': 0, 'total': limit, 'start': 0}
+                      'fetched': skip, 'filtered': 0, 'deleted': 0, 'duplicate': 0, 'total': limit, 'start': 0, 'bot_id': bot_id}
         self.get(full=True)
-        return STS(self.id)
+        return STS(self.id, bot_id)
         
     def get(self, value=None, full=False):
         values = self.data.get(self.id)
@@ -43,8 +37,9 @@ class STS:
        return int(no) / by 
     
     async def get_data(self, user_id):
-        bot = await db.get_bot(user_id)
-        k, filters = self, await db.get_filters(user_id)
+        bot = await db.get_bot(user_id, self.bot_id)
+        k, configs = self, await db.get_configs(user_id)
+        filters = await db.get_filters(user_id)
         size, configs = None, await db.get_configs(user_id)
         if configs['duplicate']:
            duplicate = [configs['db_uri'], self.TO]
@@ -54,7 +49,7 @@ class STS:
         if configs['file_size'] != 0:
             size = [configs['file_size'], configs['size_limit']]
         return bot, configs['caption'], configs['forward_tag'], {'chat_id': k.FROM, 'limit': k.limit, 'offset': k.skip, 'filters': filters,
-                'keywords': configs['keywords'], 'media_size': size, 'extensions': configs['extension'], 'skip_duplicate': duplicate}, configs['protect'], button
+                'keywords': configs['keywords'], 'media_size': size, 'extensions': configs['extension'], 'skip_duplicate': duplicate, 'forward_delay': configs.get('forward_delay', 1.0)}, configs['protect'], button
         
 
 def get_readable_time(seconds: int) -> str:
