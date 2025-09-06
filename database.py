@@ -114,7 +114,7 @@ class Database:
         user = await self.col.find_one({'id':int(id)})
         if user:
             return user.get('configs', default)
-        return default 
+        return user.get('configs', default) if 'configs' in user else default 
        
     async def add_bot(self, user_id, bot_data):
        if not await self.is_bot_exist(user_id, bot_data['id']):
