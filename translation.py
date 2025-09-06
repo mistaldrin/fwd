@@ -1,4 +1,3 @@
-
 import os
 from config import Config
 
@@ -18,6 +17,7 @@ class Translation(object):
 ⏣ __/unequify - Dᴇʟᴇᴛᴇ Dᴜᴩʟɪᴄᴀᴛᴇ Mᴇꜱꜱᴀɢᴇꜱ Iɴ Cʜᴀɴɴᴇʟꜱ__
 ⏣ __/settings - Cᴏɴꜰɪɢᴜʀᴇ Yᴏᴜʀ Sᴇᴛᴛɪɴɢꜱ__
 ⏣ __/reset - Rᴇꜱᴇᴛ Yᴏᴜʀ Sᴇᴛᴛɪɴɢꜱ__
+⏣ __/forwardelay - Sᴇᴛ ᴀ ᴄᴜꜱᴛᴏᴍ ꜰᴏʀᴡᴀʀᴅɪɴɢ ᴅᴇʟᴀʏ__
 
 <b><u>≬≬ Fᴇᴀᴛᴜʀᴇꜱ :</b></u>
 ► __Fᴏʀᴡᴀʀᴅ Mᴇꜱꜱᴀɢᴇ Fʀᴏᴍ Pᴜʙʟɪᴄ Cʜᴀɴɴᴇʟ To Yᴏᴜʀ Cʜᴀɴɴᴇʟ Wɪᴛʜᴏᴜᴛ Aᴅᴍɪɴ Peᴇʀᴍɪꜱꜱɪᴏɴ. Iꜰ Tʜᴇ Cʜᴀɴɴᴇʟ Iꜱ Pʀɪᴠᴀᴛᴇ Nᴇᴇᴅ Aᴅᴍɪɴ Pᴇʀᴍɪꜱꜱɪᴏɴ, Bᴇᴛᴇʀ Tᴏ Uꜱᴇ UꜱᴇʀBᴏᴛ__
@@ -36,7 +36,7 @@ class Translation(object):
 ► __Aᴅᴅ Aᴛʟᴇᴀꜱᴛ Oɴᴇ Cʜᴀᴛ Tᴏ Cʜᴀɴɴᴇʟꜱ (Yᴏᴜʀ Bᴏᴛ/UꜱᴇʀBᴏᴛ Mᴜꜱᴛ Bᴇ Aᴅᴍɪɴ Tʜᴇʀᴇ)__
 ► __Yᴏᴜ Cᴀɴ Aᴅᴅ Cʜᴀᴛꜱ Oʀ Bᴏᴛꜱ Bʏ Uꜱɪɴɢ /settings__
 ► __Iꜰ Tʜᴇ **Fʀᴏᴍ Cʜᴀɴɴᴇʟ** Iꜱ Pʀɪᴠᴀᴛᴇ, Yᴏᴜʀ UꜱᴇʀBᴏᴛ Mᴜꜱᴛ Bᴇ A Mᴇᴍʙᴇʀ Iɴ Tʜᴇʀᴇ Oʀ Yᴏᴜʀ Bᴏᴛ Mᴜꜱᴛ Nᴇᴇᴅ Tᴏ Bᴇ Aᴅᴍɪɴ Iɴ Tʜᴇʀᴇ Aʟꜱᴏ__
-► __Tʜᴇɴ Uꜱᴇ /forward Tᴏ Fᴏʀᴡᴀʀᴅ Mᴇꜱꜱᴀɢᴇꜱ, Wʜᴇʀᴇ Iᴛ Aꜱᴋ Fᴏʀ Sᴏᴜʀᴄᴇ Cʜᴀᴛ Tᴏ Fᴏᴡᴀʀᴅ__"""
+► __Tʜᴇɴ Uꜱᴇ /forward Tᴏ Fᴏʀᴡᴀʀᴅ Mᴇꜱꜱᴀɢᴇꜱ, Wʜᴇʀᴇ Iᴛ Aꜱᴋ Fᴏʀ Sᴏᴜʀᴄᴇ Cʜᴀᴛ Tᴏ FᴏWᴀʀᴅ__"""
   
   ABOUT_TXT = """<b>⋉ Mʏ Nᴀᴍᴇ :</b> {}
 <b>⋉ Lᴀɴɢᴜᴀɢᴇ :</b> <a>English</a>
@@ -54,7 +54,7 @@ class Translation(object):
   
   FROM_MSG = "<b><u>Sᴇᴛ Sᴏᴜʀᴄᴇ Cʜᴀᴛ</></>\n\nForward The Last Mᴇꜱꜱᴀɢᴇ Or Last Mᴇꜱꜱᴀɢᴇ Lɪɴᴋ Oꜰ Sᴏᴜʀᴄᴇ Cʜᴀᴛ.\n/cancel - Tᴏ Cᴀɴᴄᴇʟ Tʜɪꜱ Pʀᴏᴄᴇꜱꜱ"
   TO_MSG = "<b><u>Cʜᴏᴏꜱᴇ Tᴀʀɢᴇᴛ Cʜᴀᴛ</u></b>\n\nCʜᴏᴏꜱᴇ Yᴏᴜʀ Tᴀʀɢᴇᴛ Cʜᴀᴛ Fʀᴏᴍ Tʜᴇ Gɪᴠᴇɴ Bᴜᴛᴛᴏɴꜱ.\n/cancel - Tᴏ Cᴀɴᴄᴇʟ Tʜɪꜱ Pʀᴏᴄᴇꜱꜱ"
-  SKIP_MSG = "<b><u>Sᴇᴛ Mᴇꜱꜱᴀɢᴇ Sᴋɪᴩᴩɪɴɢ Nᴜᴍʙᴇʀ</u></b>\n\nSᴋɪᴩ Tʜᴇ Mᴇꜱꜱᴀɢᴇ Aꜱ Mᴜᴄʜ Aꜱ Yᴏᴜ Eɴᴛᴇʀ Tʜᴇ Nᴜᴍʙᴇʀ Aɴᴅ Tʜᴇ Rᴇꜱᴛ Oꜰ Tʜᴇ Mᴇꜱꜱᴀɢᴇ Wɪʟʟ Bᴇ Fᴏʀᴡᴀʀᴅ\nDᴇꜰᴀᴜʟᴛ Sᴋɪᴩ Nᴜᴍʙᴇʀ = <code>0</code>\n<code>eg: Iꜰ Yᴏᴜ Eɴᴛᴇʀ 0, 0 Mᴇꜱꜱᴀɢᴇ Sᴋɪᴩᴩᴇᴅ\nYᴏᴜ Eɴᴛᴇʀ 5 = 5 Mᴇꜱꜱᴀɢᴇ Sᴋɪᴩᴩᴇᴅ</code>\nSᴇɴᴅ Zᴇʀᴏ(0) Tᴏ Aᴠᴏɪᴅ Sᴋɪᴩᴩɪɴɢ\n/cancel - Tᴏ Cᴀɴᴄᴇʟ Tʜɪꜱ Pʀᴏᴄᴇꜱꜱ"
+  SKIP_MSG = "<b><u>Sᴇᴛ Mᴇꜱꜱᴀɢᴇ Sᴋɪᴩᴩɪɴɢ Nᴜᴍʙᴇʀ</u></b>\n\nSᴋɪᴩ Tʜᴇ Mᴇꜱꜱᴀɢᴇ Aꜱ Mᴜᴄʜ Aꜱ Yᴏᴜ Eɴᴛᴇʀ Tʜᴇ Nᴜᴍʙᴇʀ Aɴᴅ Tʜᴇ Rᴇꜱᴛ Oꜰ Tʜᴇ Mᴇꜱꜱᴀɢᴇ Wɪʟʟ Bᴇ FᴏʀWᴀʀᴅ\nDᴇꜰᴀᴜʟᴛ Sᴋɪᴩ Nᴜᴍʙᴇʀ = <code>0</code>\n<code>eg: Iꜰ Yᴏᴜ Eɴᴛᴇʀ 0, 0 Mᴇꜱꜱᴀɢᴇ Sᴋɪᴩᴩᴇᴅ\nYᴏᴜ Eɴᴛᴇʀ 5 = 5 Mᴇꜱꜱᴀɢᴇ Sᴋɪᴩᴩᴇᴅ</code>\nSᴇɴᴅ Zᴇʀᴏ(0) Tᴏ Aᴠᴏɪᴅ Sᴋɪᴩᴩɪɴɢ\n/cancel - Tᴏ Cᴀɴᴄᴇʟ Tʜɪꜱ Pʀᴏᴄᴇꜱꜱ"
   CANCEL = "<b> Pʀᴏᴄᴇꜱꜱ Cᴀɴᴄᴇʟʟᴇᴅ Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ! </b>"
   BOT_DETAILS = "<b><u>📄 Bᴏᴛ Dᴇᴛᴀɪʟꜱ</u></b>\n\n<b>➣ Nᴀᴍᴇ :</b> <code>{}</code>\n<b>➣ Bᴏᴛ ID :</b> <code>{}</code>\n<b>➣ Uꜱᴇʀɴᴀᴍᴇ :</b> @{}"
   USER_DETAILS = "<b><u>📄 UꜱᴇʀBᴏᴛ Dᴇᴛᴀɪʟꜱ</u></b>\n\n<b>➣ Nᴀᴍᴇ :</b> <code>{}</code>\n<b>➣ Uꜱᴇʀ ID :</b> <code>{}</code>\n<b>➣ Uꜱᴇʀɴᴀᴍᴇ :</b> @{}"  
@@ -106,16 +106,13 @@ Bᴇꜰᴏʀ Fᴏʀᴡᴀʀᴅɪɴɢ Tʜᴇ Mᴇꜱꜱᴀɢᴇꜱ Cʟɪᴄᴋ T�
 <i>° Iꜰ Tʜᴇ <b>Sᴏᴜʀᴄᴇ Cʜᴀᴛ</b> Iꜱ Pʀɪᴠᴀᴛᴇ Yᴏᴜʀ Userbot Mᴜꜱᴛ Bᴇ Mᴇᴍʙᴇʀ Or Yᴏᴜʀ Bᴏᴛ Mᴜꜱᴛ Bᴇ Aᴅᴍɪɴ Iɴ Tʜᴇʀᴇ Aʟꜱᴏ</i>
 
 <b>Iꜰ Tʜᴇ Aʙᴏᴠᴇ Iꜱ Cʜᴇᴄᴋᴇᴅ Tʜᴇɴ Tʜᴇ Yᴇꜱ Bᴜᴛᴛᴏɴ Cᴀɴ Bᴇ Cʟɪᴄᴋᴇᴅ</b>"""
+  
+  FORWARDELAY_TXT = """<b><u>Set Forwarding Delay</u></b>
 
+Use this command to set a custom delay (in seconds) between forwarded messages to avoid Telegram's flood limits.
 
+<b>Usage:</b> <code>/forwardelay [delay_in_seconds]</code>
+<b>Example:</b> <code>/forwardelay 0.5</code> (sets a half-second delay)
+<b>Example:</b> <code>/forwardelay 2</code> (sets a two-second delay)
 
-
-
-
-
-
-
-
-# MrSyD
-# Telegram Channel @Bot_Cracker
-# Developer @syd_xyz
+The default delay is 1 second."""
