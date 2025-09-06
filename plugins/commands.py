@@ -86,6 +86,7 @@ async def helpcb(bot, query):
 
 @Client.on_message(filters.private & filters.command(["forwardelay", "fd"]))
 async def forward_delay(client, message):
+    # This block now correctly handles cases where no parameter is given
     if len(message.command) < 2:
         return await message.reply_text(Translation.FORWARDELAY_TXT)
     
