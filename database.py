@@ -98,6 +98,7 @@ class Database:
             'protect': None,
             'button': None,
             'db_uri': None,
+            'forward_delay': 1.0,
             'filters': {
                'poll': True,
                'text': True,
@@ -115,19 +116,24 @@ class Database:
             return user.get('configs', default)
         return default 
        
-    async def add_bot(self, datas):
-       if not await self.is_bot_exist(datas['user_id']):
-          await self.bot.insert_one(datas)
+    async def add_bot(self, user_id, bot_data):
+       if not await self.is_bot_exist(user_id, bot_data['id']):
+          await self.bot.insert_one({'user_id': user_id, 'bot': bot_data})
+       return True
     
-    async def remove_bot(self, user_id):
-       await self.bot.delete_many({'user_id': int(user_id)})
+    async def remove_bot(self, user_id, bot_id):
+       await self.bot.delete_many({'user_id': int(user_id), 'bot.id': int(bot_id)})
       
-    async def get_bot(self, user_id: int):
-       bot = await self.bot.find_one({'user_id': user_id})
-       return bot if bot else None
+    async def get_bot(self, user_id: int, bot_id: int):
+       bot = await self.bot.find_one({'user_id': user_id, 'bot.id': bot_id})
+       return bot['bot'] if bot else None
                                           
-    async def is_bot_exist(self, user_id):
-       bot = await self.bot.find_one({'user_id': user_id})
+    async def get_all_bots(self, user_id: int):
+       bots = self.bot.find({'user_id': user_id})
+       return [b['bot'] async for b in bots]
+    
+    async def is_bot_exist(self, user_id, bot_id):
+       bot = await self.bot.find_one({'user_id': user_id, 'bot.id': bot_id})
        return bool(bot)
                                           
     async def in_channel(self, user_id: int, chat_id: int) -> bool:
