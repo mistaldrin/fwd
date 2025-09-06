@@ -17,47 +17,64 @@ SYD_CHANNELS = ["norFederation"]
 @Client.on_message(filters.private & filters.command(["fwd", "forward"]))
 async def run(bot, message):
     buttons = []
-    btn_data = {}
     user_id = message.from_user.id
-    _bot = await db.get_bot(user_id)
-    if not _bot:
-      return await message.reply("Yᴏᴜ Dɪᴅ Nᴏᴛ Aᴅᴅᴇᴅ Aɴʏ Bᴏᴛ. Pʟᴇᴀꜱᴇ Aᴅᴅ A Bᴏᴛ Uꜱɪɴɢ /settings !")
+    
+    # Check for all available bots
+    bots = await db.get_all_bots(user_id)
+    if not bots:
+        return await message.reply("Yᴏᴜ Dɪᴅ Nᴏᴛ Aᴅᴅᴇᴅ Aɴʏ Bᴏᴛ. Pʟᴇᴀꜱᴇ Aᴅᴅ A Bᴏᴛ Uꜱɪɴɢ /settings !")
+
     channels = await db.get_user_channels(user_id)
     if not channels:
        return await message.reply_text("Please Set A To Channel In /settings Before Forwarding")
-        
-    if len(channels) > 0:
-       # Use a set to store unique channel IDs to prevent duplicate buttons
-       unique_channels = []
-       seen_ids = set()
-       for channel in channels:
-           if channel['chat_id'] not in seen_ids:
-               unique_channels.append(channel)
-               seen_ids.add(channel['chat_id'])
-               
-       for channel in unique_channels:
-           buttons.append([InlineKeyboardButton(f"{channel['title']}", callback_data=f"fwd_target_{channel['chat_id']}")])
     
-       buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="close_btn")]) 
-       
-       await message.reply_text("<b><u>Cʜᴏᴏꜱᴇ Tᴀʀɢᴇᴛ Cʜᴀᴛ</u></b>\n\nCʜᴏᴏꜱᴇ Yᴏᴜʀ Tᴀʀɢᴇᴛ Cʜᴀᴛ Fʀᴏᴍ Tʜᴇ Gɪᴠᴇɴ Bᴜᴛᴛᴏɴꜱ.", reply_markup=InlineKeyboardMarkup(buttons))
-    else:
-       return await message.reply_text("Please Set A To Channel In /settings Before Forwarding")
+    # Create buttons for each bot
+    for _bot in bots:
+        buttons.append([InlineKeyboardButton(f"🤖 {_bot['name']}", callback_data=f"fwd_bot_{_bot['id']}")])
+    buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="close_btn")])
 
-@Client.on_callback_query(filters.regex(r'^fwd_target_'))
-async def get_target_chat(bot, query):
-    # Acknowledge the callback query to prevent a race condition and duplicate messages.
+    await message.reply_text("<b><u>Cʜᴏᴏꜱᴇ Bᴏᴛ</u></b>\n\nCʜᴏᴏꜱᴇ Tʜᴇ Bᴏᴛ Yᴏᴜ Wᴀɴᴛ To Uꜱᴇ Fᴏʀ Fᴏʀᴡᴀʀᴅɪɴɢ.", reply_markup=InlineKeyboardMarkup(buttons))
+        
+@Client.on_callback_query(filters.regex(r'^fwd_bot_'))
+async def choose_target_chat(bot, query):
     await query.answer()
 
     user_id = query.from_user.id
-    toid = int(query.data.split('_')[2])
+    bot_id = int(query.data.split('_')[2])
     
-    _bot = await db.get_bot(user_id)
+    channels = await db.get_user_channels(user_id)
+    
+    if len(channels) > 0:
+        unique_channels = []
+        seen_ids = set()
+        for channel in channels:
+            if channel['chat_id'] not in seen_ids:
+                unique_channels.append(channel)
+                seen_ids.add(channel['chat_id'])
+               
+        buttons = []
+        for channel in unique_channels:
+            buttons.append([InlineKeyboardButton(f"{channel['title']}", callback_data=f"fwd_target_{bot_id}_{channel['chat_id']}")])
+        
+        buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="close_btn")]) 
+       
+        await query.message.edit_text("<b><u>Cʜᴏᴏꜱᴇ Tᴀʀɢᴇᴛ Cʜᴀᴛ</u></b>\n\nCʜᴏᴏꜱᴇ Yᴏᴜʀ Tᴀʀɢᴇᴛ Cʜᴀᴛ Fʀᴏᴍ Tʜᴇ Gɪᴠᴇɴ Bᴜᴛᴛᴏɴꜱ.", reply_markup=InlineKeyboardMarkup(buttons))
+    else:
+       await query.message.edit_text("Please Set A To Channel In /settings Before Forwarding")
+    
+@Client.on_callback_query(filters.regex(r'^fwd_target_'))
+async def get_source_chat(bot, query):
+    await query.answer()
+
+    user_id = query.from_user.id
+    bot_id, toid = query.data.split('_')[2:]
+    toid = int(toid)
+    bot_id = int(bot_id)
+
+    _bot = await db.get_bot(user_id, bot_id)
     channels = await db.get_user_channels(user_id)
     to_title = next((c['title'] for c in channels if c['chat_id'] == toid), 'Unknown')
     
-    # Use bot.ask() to both send the message and wait for a reply, preventing duplicates.
-    # We will also delete the original button message.
     await query.message.delete()
     
     try:
@@ -101,7 +118,7 @@ async def get_target_chat(bot, query):
         
     forward_id = f"{user_id}-{skipno.id}"
     buttons = [[
-        InlineKeyboardButton('Yᴇꜱ', callback_data=f"start_public_{forward_id}"),
+        InlineKeyboardButton('Yᴇꜱ', callback_data=f"start_public_{forward_id}_{bot_id}"),
         InlineKeyboardButton('Nᴏ', callback_data="close_btn")
     ]]
     reply_markup = InlineKeyboardMarkup(buttons)
@@ -112,7 +129,7 @@ async def get_target_chat(bot, query):
         reply_markup=reply_markup
     )
     
-    STS(forward_id).store(chat_id, toid, int(skipno.text), int(last_msg_id))
+    STS(forward_id).store(chat_id, toid, int(skipno.text), int(last_msg_id), bot_id)
 
 
 @Client.on_callback_query(filters.regex("check_subscription"))
