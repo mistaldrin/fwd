@@ -1,18 +1,19 @@
 # Dawn Interactive Utilities
 # This file contains the shared logic for interactive command flows.
+# Created to keep original plugin files clean and modularize new features.
 
 import asyncio
 from telethon import Button, events
 from telethon.tl.types import Channel
 from telethon.tl.functions.messages import GetMessagesViewsRequest
 
-# Adjust these imports based on your project's structure if necessary
+# Imports from your project's core structure
 from fwd import BOTLOG_CHATID, DAWN_USERS, bot
 from fwd.userbot import USERBOT_ID_S, USERBOTS
 
 # --- SHARED STATE & HELPER FUNCTIONS ---
 
-CONVO_STATE = {}  # Manages all interactive conversations
+CONVO_STATE = {}  # Manages all interactive conversations state by user_id
 
 async def get_chats_for_client(client_id):
     """(Helper) Fetches a list of chats for a given userbot client."""
@@ -23,11 +24,12 @@ async def get_chats_for_client(client_id):
     try:
         dialogs = await client.get_dialogs(limit=None)
     except Exception as e:
-        print(f"Could not get dialogs for userbot_{client_id}: {e}")
+        print(f"[InteractiveUtils] Could not get dialogs for userbot_{client_id}: {e}")
         return []
 
     for dialog in dialogs:
         can_send = True
+        # Logic to check send permissions
         if hasattr(dialog.entity, "banned_rights") and dialog.entity.banned_rights.send_messages:
             can_send = False
         if isinstance(dialog.entity, Channel) and not dialog.entity.megagroup:
@@ -124,10 +126,16 @@ async def handle_interactive_replies(event):
     if step == "select_chat":
         chats, selected_chat = state.get("chats", []), None
         try:
-            val = int(event.text.strip())
-            if 1 <= val <= len(chats): selected_chat = chats[val - 1]
-            else: selected_chat = next((c for c in chats if c["id"] == val), None)
-        except (ValueError, TypeError): pass
+            val = event.text.strip()
+            # Handle both serial number and direct chat ID
+            if val.lstrip('-').isdigit():
+                val = int(val)
+                if 1 <= val <= len(chats):
+                    selected_chat = chats[val - 1]
+                else:
+                    selected_chat = next((c for c in chats if c["id"] == val), None)
+        except (ValueError, TypeError):
+             return # Ignore non-numeric input
 
         if not selected_chat: return
         state["target_chat_id"], state["step"] = selected_chat["id"], "range_selection"
