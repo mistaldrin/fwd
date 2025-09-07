@@ -15,8 +15,8 @@ Select 'Help' for a list of commands.
 Available commands:
 
 ● /start - Check if alive.
-● /forward - Forward a range of messages.
-● /unequify - Remove duplicates from a chat.
+● /forward [optional: source chat] - Forward messages.
+● /unequify [optional: source chat] - Remove duplicates from a chat.
 ● /ubclist - List all userbot chats.
 ● /settings - Open the configuration menu.
 ● /resetme - A fresh start. Wipes all settings.
@@ -40,7 +40,7 @@ A quick checklist to get started:
     - Userbot must be in private source channels.
     - Bot/userbot needs admin rights in target channels.
 
-Ready? Use /forward to begin. (ﾉ´ヮ`)ﾉ*:･ﾟ✧"""
+Ready? Use `/forward` to begin. (ﾉ´ヮ`)ﾉ*:･ﾟ✧"""
   
   ABOUT_TXT = """<b>֎ About ֎</b>
 
@@ -56,12 +56,15 @@ Ready? Use /forward to begin. (ﾉ´ヮ`)ﾉ*:･ﾟ✧"""
 ● <b>Active Forwards:</b> <code>{}</code>
 """
   
-  FROM_MSG = "<b>Source Chat?</b>\n\nForward the last message or send a message link.\n\n/cancel - Abort mission."
+  SOURCE_MSG_BOT = "<b>Source Chat?</b>\n\nSend the channel username, ID, or a message link.\n\n/cancel - Abort mission."
+  SOURCE_MSG_USERBOT = "<b>Source Chat?</b>\n\nSelect a source chat from the list below, or reply with a Chat ID."
   TO_MSG = "<b>Target Chat?</b>\n\nSelect a target chat from the buttons below.\n\n/cancel - Abort mission."
   
   RANGE_SELECTION_TXT = """<b>֎ Message Range ֎</b>
 
-Forward all messages or define a custom range below.
+Ready to forward all messages.
+
+The range is currently set from the oldest to the newest message. Press 'Forward All' to begin, or use the buttons below to define a custom range.
 
 <i>Note: Large channels can take a while. Patience is a virtue.</i>"""
 
