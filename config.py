@@ -23,7 +23,13 @@ class temp(object):
     forwardings = 0
     BANNED_USERS = []
     IS_FRWD_CHAT = []
-    
+    # Dictionaries for managing interactive sessions
+    RANGE_SESSIONS = {}
+    UNEQUIFY_SESSIONS = {}
+    USERBOT_CHATS_CACHE = {}
+
+
+
 
 
 
