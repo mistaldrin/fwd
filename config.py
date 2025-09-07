@@ -27,6 +27,9 @@ class temp(object):
     RANGE_SESSIONS = {}
     UNEQUIFY_SESSIONS = {}
     USERBOT_CHATS_CACHE = {}
+    # User-specific bot selections for concurrent operations
+    FORWARD_BOT_ID = {}
+    UNEQUIFY_USERBOT_ID = {}
 
 
 
