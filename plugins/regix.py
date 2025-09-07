@@ -24,13 +24,13 @@ logger.setLevel(logging.INFO)
 TEXT = Translation.TEXT
 
 
-async def process_messages_in_batches(client, from_chat, message_ids_generator, user, m, sts, forward_tag, caption, button, protect, forward_delay):
+async def process_messages_in_batches(client, from_chat, message_ids_generator, user, m, sts, forward_tag, caption, button, protect, forward_delay, main_bot):
     """Helper function to process messages in batches to conserve memory."""
     MSG_batch = []
     pling = 0
     
     async for message in message_ids_generator:
-        if await is_cancelled(user, m, sts): # Removed client from call
+        if await is_cancelled(user, m, sts, main_bot):
             return "cancelled"
         
         if pling % 20 == 0: 
@@ -126,15 +126,15 @@ async def pub_(bot, message):
                     
                     async def message_fetcher_generator():
                         batch = list(range(start_id, end_id + 1))
-                        for i in range(0, len(batch), 100):
-                            chunk = batch[i:i+100]
+                        for idx in range(0, len(batch), 100):
+                            chunk = batch[idx:idx+100]
                             messages_chunk = await client.get_messages(i.FROM, chunk)
                             for msg in messages_chunk:
                                 yield msg
                     
                     message_generator = message_fetcher_generator()
 
-                result = await process_messages_in_batches(client, i.FROM, message_generator, user, m, sts, forward_tag, caption, button, protect, forward_delay)
+                result = await process_messages_in_batches(client, i.FROM, message_generator, user, m, sts, forward_tag, caption, button, protect, forward_delay, bot)
                 
                 if result == "cancelled":
                     return # Cleanup is handled in finally block
@@ -246,7 +246,7 @@ async def edit(msg, title, status, sts):
       button.append([InlineKeyboardButton('✖️ Cᴀɴᴄᴇʟ ✖️', 'terminate_frwd')])
    await msg_edit(msg, text, InlineKeyboardMarkup(button))
    
-async def is_cancelled(user, msg, sts):
+async def is_cancelled(user, msg, sts, bot):
    if temp.CANCEL.get(user)==True:
       await edit(msg, "Cancelled", "completed", sts)
       # We send the message using the main bot client, not the temporary one
