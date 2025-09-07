@@ -220,7 +220,7 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
                         
                     chats[str(serial)] = dialog.chat
                     chats[str(dialog.chat.id)] = dialog.chat
-                    text += f"<b>{serial}. {perms}</b> {dialog.chat.title} (<code>{dialog.chat.id}</code>)\n"
+                    text += f"<b>{serial}.</b> {perms} {dialog.chat.title} (<code>{dialog.chat.id}</code>)\n"
                     serial += 1
 
             await query.message.edit(text, parse_mode=ParseMode.HTML)
