@@ -38,6 +38,12 @@ async def unequify_start(bot: Client, message: Message):
     Initial entry point for the /unequify command.
     """
     user_id = message.from_user.id
+    
+    # Explicitly check if the user is banned
+    ban_status = await db.get_ban_status(user_id)
+    if ban_status["is_banned"]:
+        return await message.reply_text(f"You are banned from using this bot.\n\nReason: {ban_status['ban_reason']}")
+
     userbots = [b for b in await db.get_bots(user_id) if not b.get('is_bot')]
 
     if not userbots:
@@ -100,6 +106,12 @@ async def unequify_continue(bot: Client, message: Message, user_id: int, userbot
 @Client.on_message(filters.command("ubclist") & filters.private)
 async def get_userbot_chat_list(bot: Client, message: Message):
     user_id = message.from_user.id
+    
+    # Explicitly check if the user is banned
+    ban_status = await db.get_ban_status(user_id)
+    if ban_status["is_banned"]:
+        return await message.reply_text(f"You are banned from using this bot.\n\nReason: {ban_status['ban_reason']}")
+
     userbots = [b for b in await db.get_bots(user_id) if not b.get('is_bot')]
     
     if not userbots:
