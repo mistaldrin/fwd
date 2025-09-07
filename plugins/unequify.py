@@ -7,12 +7,10 @@ from pyrogram.enums import ChatMemberStatus
 from pyrogram.errors import FloodWait, ChannelInvalid, UsernameNotOccupied, UsernameInvalid, PeerIdInvalid, UserAlreadyParticipant
 
 from .test import CLIENT, start_clone_bot
-from .utils import start_range_selection, update_range_message
+from .utils import start_range_selection
 from translation import Translation
 from config import temp
-
-# --- Environment Variable ---
-USERBOT_SESSION_STRING = os.environ.get("USERBOT_SESSION_STRING")
+from database import db
 
 # --- Constants for the interactive menu ---
 OPTION_LABELS = ["Text", "Photos/Videos", "Audio", "Documents", "Stickers"]
@@ -39,6 +37,13 @@ async def unequify_start(bot: Client, message: Message):
     """
     Initial entry point for the /unequify command.
     """
+    user_id = message.from_user.id
+    userbot_config = await db.get_bot(user_id)
+    
+    if not userbot_config or userbot_config.get('is_bot'):
+        await message.reply_text("❌ **Userbot Not Found!**\n\nPlease add a Userbot session via the /settings menu to use this feature.")
+        return
+
     if len(message.command) < 2:
         # Show interactive menu if no target is provided
         buttons = [
@@ -50,23 +55,25 @@ async def unequify_start(bot: Client, message: Message):
 
     target_channel_input = message.command[1]
 
-    if not USERBOT_SESSION_STRING:
-        return await message.reply_text("❌ **Configuration Error!**\n\nThe `USERBOT_SESSION_STRING` is not set.")
-
     # A target was provided, so start the range selection process directly
     try:
+        # We need a client to get chat info. Let's use the main bot client for this initial step.
         chat = await bot.get_chat(target_channel_input)
         # Using an arbitrary high number for last message id, user will edit it.
         await start_range_selection(bot, message, from_chat_id=chat.id, from_title=chat.title, to_chat_id=None, last_msg_id=999999, final_callback_prefix="uneq_final")
-    except (UsernameInvalid, PeerIdInvalid) as e:
+    except (UsernameInvalid, PeerIdInvalid, ChannelInvalid) as e:
         await message.reply(f"Could not find the chat: `{e}`. Please check the username/ID.")
     except Exception as e:
         await message.reply(f"An error occurred: {e}")
 
 @Client.on_message(filters.command("ubclist") & filters.private)
 async def get_userbot_chat_list(bot: Client, message: Message):
-    if not USERBOT_SESSION_STRING:
-        return await message.reply_text("❌ **Configuration Error!**\n\nThe `USERBOT_SESSION_STRING` is not set.")
+    user_id = message.from_user.id
+    userbot_config = await db.get_bot(user_id)
+    
+    if not userbot_config or userbot_config.get('is_bot'):
+        await message.reply_text("❌ **Userbot Not Found!**\n\nPlease add a Userbot session via the /settings menu to use this feature.")
+        return
 
     sts = await message.reply("`Fetching chat list from userbot... This might take a while.`")
     
@@ -74,21 +81,28 @@ async def get_userbot_chat_list(bot: Client, message: Message):
     chat_list_text += "Format: [Permission] Chat Title - `Chat ID`\n\n"
 
     try:
-        async with CLIENT().client(USERBOT_SESSION_STRING, user=True) as userbot:
+        session_string = userbot_config['session']
+        async with CLIENT().client(session_string, user=True) as userbot:
             userbot = await start_clone_bot(userbot)
             async for dialog in userbot.get_dialogs():
                 chat = dialog.chat
                 perms = "❌"
-                if chat.permissions:
-                    if chat.permissions.can_send_messages:
-                        perms = "✅"
+                try:
+                    me = await userbot.get_chat_member(chat.id, "me")
+                    if me.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]:
+                       perms = "✅"
+                except Exception:
+                    pass
                 
                 chat_list_text += f"{perms} {chat.title} - `{chat.id}`\n"
         
-        # Send as a text file
-        with io.StringIO(chat_list_text) as file:
-            file.name = "userbot_chats.txt"
-            await message.reply_document(file, caption="Here is the list of chats accessible by your userbot.")
+        # Send as a text file if too long, otherwise as a message
+        if len(chat_list_text) > 4096:
+            with io.StringIO(chat_list_text) as file:
+                file.name = "userbot_chats.txt"
+                await message.reply_document(file, caption="Here is the list of chats accessible by your userbot.")
+        else:
+            await message.reply_text(chat_list_text)
         await sts.delete()
 
     except Exception as e:
@@ -97,6 +111,7 @@ async def get_userbot_chat_list(bot: Client, message: Message):
 
 @Client.on_callback_query(filters.regex("^uneq_"))
 async def unequify_callbacks(bot: Client, query: CallbackQuery):
+    user_id = query.from_user.id
     data = query.data.split("_", 1)[1]
 
     if data == "manual":
@@ -107,6 +122,7 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
             await query.message.delete()
             # Re-call the main function with the provided target
             msg_copy = query.message.copy()
+            msg_copy.from_user = query.from_user # Important for context
             msg_copy.text = f"/unequify {target}"
             msg_copy.command = ["unequify", target]
             await unequify_start(bot, msg_copy)
@@ -114,17 +130,18 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
             await query.message.edit_text("Cancelled.")
 
     elif data == "select_userbot":
-        # Simplified: We assume one userbot is set via ENV
-        if not USERBOT_SESSION_STRING:
-            return await query.message.edit("`USERBOT_SESSION_STRING` not found.")
+        userbot_config = await db.get_bot(user_id)
+        if not userbot_config or userbot_config.get('is_bot'):
+            return await query.message.edit("Userbot not found. Please add one in /settings.")
         
-        await query.message.edit("`Fetching chats...`")
+        await query.message.edit("`Fetching chats... This may take a moment.`")
         
         chats = {}
         serial = 1
         text = "Reply with the Serial Number (S.No) or the Chat ID of the target channel.\n\n"
         try:
-            async with CLIENT().client(USERBOT_SESSION_STRING, user=True) as userbot:
+            session_string = userbot_config['session']
+            async with CLIENT().client(session_string, user=True) as userbot:
                 userbot = await start_clone_bot(userbot)
                 async for dialog in userbot.get_dialogs():
                     chats[str(serial)] = dialog.chat
@@ -132,24 +149,21 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
                     text += f"**{serial}.** {dialog.chat.title} (`{dialog.chat.id}`)\n"
                     serial += 1
             
-            session_id = f"uneq_sel_{query.from_user.id}"
-            temp.UNEQUIFY_SESSIONS[session_id] = {'chats': chats}
-
-            ask_msg = await query.message.edit(text)
+            await query.message.edit(text)
             
             try:
                 reply = await bot.listen(chat_id=query.message.chat.id, user_id=query.from_user.id, timeout=120)
-                selected_chat = chats.get(reply.text)
+                selected_chat = chats.get(reply.text.strip())
 
                 if not selected_chat:
-                    return await ask_msg.edit("Invalid selection. Please start over.")
+                    return await query.message.reply_text("Invalid selection. Please start over.")
 
-                await ask_msg.delete()
+                await query.message.delete()
                 # Start range selection for the chosen chat
                 await start_range_selection(bot, query, from_chat_id=selected_chat.id, from_title=selected_chat.title, to_chat_id=None, last_msg_id=999999, final_callback_prefix="uneq_final")
 
             except asyncio.TimeoutError:
-                await ask_msg.edit("Selection timed out.")
+                await query.message.reply_text("Selection timed out.")
             
         except Exception as e:
             await query.message.edit(f"An error occurred: `{e}`")
@@ -182,10 +196,15 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
 
 async def start_deduplication(bot: Client, callback_query: CallbackQuery, selection_state: str, session_id: str):
     status_message = callback_query.message
+    user_id = callback_query.from_user.id
     
     range_session = temp.RANGE_SESSIONS.pop(session_id, None)
     if not range_session:
         return await status_message.edit_text("Error: Session expired or invalid.")
+
+    userbot_config = await db.get_bot(user_id)
+    if not userbot_config or userbot_config.get('is_bot'):
+        return await status_message.edit_text("Error: Userbot not found.")
 
     target_channel = range_session['from_chat_id']
     start_id = min(range_session['start_id'], range_session['end_id'])
@@ -204,7 +223,8 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
     total_in_range = abs(end_id - start_id) + 1
 
     try:
-        async with CLIENT().client(USERBOT_SESSION_STRING, user=True) as userbot:
+        session_string = userbot_config['session']
+        async with CLIENT().client(session_string, user=True) as userbot:
             userbot = await start_clone_bot(userbot)
             chat = await userbot.get_chat(target_channel)
 
@@ -221,8 +241,8 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
             
             message_ids_to_scan = list(range(start_id, end_id + 1))
             
-            for i in range(0, len(message_ids_to_scan), 100):
-                chunk = message_ids_to_scan[i:i+100]
+            for i in range(0, len(message_ids_to_scan), 200): # Use 200 batch size for get_messages
+                chunk = message_ids_to_scan[i:i+200]
                 messages = await userbot.get_messages(chat.id, chunk)
                 
                 for msg in messages:
@@ -232,8 +252,9 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
                     
                     if selection_state[0] == '1' and msg.text:
                         identifier = msg.text.strip()
-                    elif selection_state[1] == '1' and (msg.photo or msg.video) and msg.media:
-                        identifier = getattr(msg, msg.media.value).file_unique_id
+                    elif selection_state[1] == '1' and (msg.photo or msg.video) and hasattr(msg, 'media') and msg.media:
+                        media_obj = getattr(msg, msg.media.value, None)
+                        if media_obj: identifier = getattr(media_obj, 'file_unique_id', None)
                     elif selection_state[2] == '1' and msg.audio:
                         identifier = msg.audio.file_unique_id
                     elif selection_state[3] == '1' and msg.document:
@@ -251,7 +272,10 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
                     total_deleted += len(duplicates_to_delete)
                     duplicates_to_delete.clear()
                     progress_text = Translation.DUPLICATE_TEXT.format(total_in_range, total_scanned, total_deleted, "...")
-                    await status_message.edit_text(progress_text)
+                    try:
+                        await status_message.edit_text(progress_text)
+                    except FloodWait:
+                        pass
                     await asyncio.sleep(5)
 
             if duplicates_to_delete:
