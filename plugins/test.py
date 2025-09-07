@@ -24,11 +24,6 @@ BOT_TOKEN_TEXT = "1) Cʀᴇᴀᴛᴇ A Bᴏᴛ Uꜱɪɴɢ @BotFather [ꜱᴇɴ�
 SESSION_STRING_SIZE = 351
 
 
-async def start_clone_bot(FwdBot):
-   if not FwdBot.is_connected:
-      await FwdBot.start()
-   return FwdBot
-
 class CLIENT: 
   def __init__(self):
      self.api_id = Config.API_ID
@@ -38,16 +33,16 @@ class CLIENT:
      # Give each client a unique name to avoid conflicts
      client_name = str(uuid4())
      
-     if user is None and not data.get('is_bot'):
-        # This branch is for userbots when called with a dict
+     # Userbot client from session dictionary (used by /forward)
+     if user is None and isinstance(data, dict) and not data.get('is_bot'):
         return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, session_string=data.get('session'), in_memory=True)
+     
+     # Userbot client from session string (used by /unequify, /ubclist)
      elif user is True:
-        # This is the branch used by unequify and ubclist.
-        # `data` here is the session_string.
-        # Adding in_memory=True prevents the client from writing a session file, which can cause hanging in some environments.
         return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, session_string=data, in_memory=True)
+     
+     # Bot client from token
      else:
-        # This branch is for regular bots using a token.
         token = data.get('token') if isinstance(data, dict) else data
         return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, bot_token=token, in_memory=True)
   
