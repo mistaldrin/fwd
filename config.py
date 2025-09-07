@@ -22,6 +22,7 @@ class temp(object):
     CANCEL = {}
     forwardings = 0
     BANNED_USERS = []
+    SUDO_USERS = []
     IS_FRWD_CHAT = []
     # Dictionaries for managing interactive sessions
     RANGE_SESSIONS = {}
