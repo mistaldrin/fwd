@@ -7,7 +7,7 @@ from pyrogram.enums import ChatMemberStatus
 from pyrogram.errors import FloodWait, ChannelInvalid, UsernameNotOccupied, UsernameInvalid, PeerIdInvalid, UserAlreadyParticipant
 
 from .test import CLIENT
-from .utils import start_range_selection
+from .utils import start_range_selection, force_subscribe
 from translation import Translation
 from config import temp
 from database import db
@@ -33,6 +33,7 @@ def create_selection_keyboard(selection_state: str, session_id: str) -> InlineKe
     return InlineKeyboardMarkup(buttons)
 
 @Client.on_message(filters.command("unequify") & filters.private)
+@force_subscribe
 async def unequify_start(bot: Client, message: Message):
     """
     Initial entry point for the /unequify command.
@@ -78,13 +79,19 @@ async def unequify_continue(bot: Client, message: Message, userbot_id: int):
 
     # A target was provided, so start the range selection process directly
     try:
-        # We need a client to get chat info. Let's use the main bot client for this initial step.
-        chat = await bot.get_chat(target_channel_input)
-        last_msg_id = 0
-        async for last_message in bot.get_chat_history(chat.id, limit=1):
-            last_msg_id = last_message.id
-            break
-        await start_range_selection(bot, message, from_chat_id=chat.id, from_title=chat.title, to_chat_id=None, last_msg_id=last_msg_id, final_callback_prefix="uneq_final")
+        # Use the selected userbot to get chat info, not the main bot
+        userbot_config = await db.get_bot(user_id, userbot_id)
+        if not userbot_config:
+            return await message.reply("Could not find the selected userbot's configuration.")
+
+        async with CLIENT().client(userbot_config) as temp_client:
+            chat = await temp_client.get_chat(target_channel_input)
+            last_msg_id = 0
+            async for last_message in temp_client.get_chat_history(chat.id, limit=1):
+                last_msg_id = last_message.id
+                break
+            await start_range_selection(bot, message, from_chat_id=chat.id, from_title=chat.title, to_chat_id=None, last_msg_id=last_msg_id, final_callback_prefix="uneq_final")
+
     except (UsernameInvalid, PeerIdInvalid, ChannelInvalid) as e:
         await message.reply(f"Could not find the chat: `{e}`. Please check the username/ID.")
     except Exception as e:
@@ -92,6 +99,7 @@ async def unequify_continue(bot: Client, message: Message, userbot_id: int):
 
 
 @Client.on_message(filters.command("ubclist") & filters.private)
+@force_subscribe
 async def get_userbot_chat_list(bot: Client, message: Message):
     user_id = message.from_user.id
     userbots = [b for b in await db.get_bots(user_id) if not b.get('is_bot')]
@@ -237,7 +245,7 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
         state_list[index] = '1' if state_list[index] == '0' else '0'
         new__state = "".join(state_list)
 
-        new_keyboard = create_selection_keyboard(new__state, session_id)
+        new_keyboard = create_selection_keyboard(new_state, session_id)
         await query.message.edit_reply_markup(new_keyboard)
         await query.answer()
 
