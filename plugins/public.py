@@ -1,20 +1,20 @@
 import re
 import asyncio
-from .utils import STS, start_range_selection, update_range_message
+from .utils import STS, start_range_selection, update_range_message, force_subscribe
+from .test import CLIENT
 from database import db
 from config import temp
 from translation import Translation
 from pyrogram import Client, filters, enums
 from pyrogram.errors import FloodWait, UserNotParticipant
 from pyrogram.errors.exceptions.not_acceptable_406 import ChannelPrivate as PrivateChat
-from pyrogram.errors.exceptions.bad_request_400 import ChannelInvalid, ChatAdminRequired, UsernameInvalid, UsernameNotModified, ChannelPrivate
+from pyrogram.errors.exceptions.bad_request_400 import ChannelInvalid, ChatAdminRequired, UsernameInvalid, UsernameNotModified, ChannelPrivate, PeerIdInvalid
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
-
-SYD_CHANNELS = ["norFederation"]
 
 #===================Run Function===================#
 
 @Client.on_message(filters.private & filters.command(["fwd", "forward"]))
+@force_subscribe
 async def run(bot, message):
     user_id = message.from_user.id
     bots = await db.get_bots(user_id)
@@ -99,15 +99,21 @@ async def get_target_chat(bot, query):
         return await fromid_msg.reply_text("Invalid Input!")
 
     try:
-        chat_info = await bot.get_chat(chat_id)
-        title = chat_info.title
-        # If last_msg_id is not from a link, get the latest message id
-        if last_msg_id == 0:
-            async for last_message in bot.get_chat_history(chat_id, limit=1):
-                last_msg_id = last_message.id
-                break
-    except (PrivateChat, ChannelInvalid):
-        title = "Private Chat"
+        # Use the selected bot/userbot to get chat info, not the main bot
+        selected_bot_config = await db.get_bot(user_id, bot_id)
+        if not selected_bot_config:
+            return await fromid_msg.reply("Could not find the selected bot's configuration.")
+
+        async with CLIENT().client(selected_bot_config) as temp_client:
+            chat_info = await temp_client.get_chat(chat_id)
+            title = chat_info.title
+            if last_msg_id == 0:
+                async for last_message in temp_client.get_chat_history(chat_id, limit=1):
+                    last_msg_id = last_message.id
+                    break
+                    
+    except (PrivateChat, ChannelInvalid, PeerIdInvalid):
+        title = "Private Chat" # Assume title for inaccessible chats
     except (UsernameInvalid, UsernameNotModified):
         return await fromid_msg.reply('Invalid Link Specified.')
     except Exception as e:
@@ -263,26 +269,6 @@ async def cancel_range_selection(bot, query):
 
 @Client.on_callback_query(filters.regex("check_subscription"))
 async def check_subscription(client, callback_query: CallbackQuery):
-    user_id = callback_query.from_user.id
-    not_joined_channels = []
-
-    for channel in SYD_CHANNELS:
-        try:
-            user = await client.get_chat_member(channel, user_id)
-            if user.status in {"kicked", "left"}:
-                not_joined_channels.append(channel)
-        except UserNotParticipant:
-            not_joined_channels.append(channel)
-
-    if not not_joined_channels:
-        await callback_query.message.edit_text(
-            "**Tʜᴀɴᴋꜱ ✨, Yᴏᴜ ʜᴀᴠᴇ ᴊᴏɪɴᴇᴅ ᴏɴ ᴀʟʟ ᴛʜᴇ ʀᴇqᴜɪʀᴇᴅ ᴄʜᴀɴɴᴇʟꜱ. \nCʟɪᴄᴋ ᴏɴ 😊 😂 /forward ɴᴏᴡ ᴛᴏ ꜱᴛᴀʀᴛ ᴛʜᴇ ᴩʀᴏᴄᴇꜱꜱ.....⚡**"
-        )
-        await callback_query.message.reply("🎊")
-    else:
-        buttons = [[InlineKeyboardButton(text=f"✧ Jᴏɪɴ {channel.capitalize().replace('_', ' ')} ✧", url=f"https://t.me/{channel}")] for channel in not_joined_channels]
-        buttons.append([InlineKeyboardButton(text="✧ Jᴏɪɴ Bᴀᴄᴋ Uᴩ ✧", url="https://t.me/+bAsrcnckBNdkMjVi")])
-        buttons.append([InlineKeyboardButton(text="☑ ᴊᴏɪɴᴇᴅ ☑", callback_data="check_subscription")])
-
-        text = "**Sᴛɪʟʟ 🥲, ʏᴏᴜ ʜᴀᴠᴇɴᴛ ᴊᴏɪɴᴇᴅ ɪɴ ᴏᴜʀ ᴀʟʟ ʀᴇqᴜɪʀᴇᴅ ᴄʜᴀɴɴᴇʟꜱ, ᴩʟᴇᴀꜱᴇ ᴅᴏ ꜱᴏ ᴛᴏ ᴄᴏɴᴛɪɴᴜᴇ..✨ .**"
-        await callback_query.message.edit_text(text=text, reply_markup=InlineKeyboardMarkup(buttons))
+    # This function is now linked to the force_subscribe decorator
+    # It re-checks subscription when the user clicks the "Joined" button.
+    await force_subscribe(client, callback_query)
