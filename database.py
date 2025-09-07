@@ -1,6 +1,6 @@
 import motor.motor_asyncio
 from pymongo import MongoClient
-from config import Config
+from config import Config, temp
 from os import environ
 
 DB_NAME = Config.DB_NAME
@@ -106,6 +106,8 @@ class Database:
     async def get_banned(self):
         users = self.col.find({'ban_status.is_banned': True})
         b_users = [user['id'] async for user in users]
+        # Also update the temp list on startup
+        temp.BANNED_USERS = b_users
         return b_users
 
     async def update_configs(self, id, configs):
