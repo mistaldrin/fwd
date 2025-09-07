@@ -22,7 +22,7 @@ async def run(bot, message):
         return await message.reply("Yᴏᴜ Dɪᴅ Nᴏᴛ Aᴅᴅᴇᴅ Aɴʏ Bᴏᴛ Oʀ UꜱᴇʀBᴏᴛ. Pʟᴇᴀꜱᴇ Aᴅᴅ Oɴᴇ Uꜱɪɴɢ /settings !")
 
     if len(bots) == 1:
-        await choose_target_chat(bot, message, bots[0]['id'])
+        await choose_target_chat(bot, message, user_id, bots[0]['id'])
     else:
         buttons = []
         for _bot in bots:
@@ -34,12 +34,12 @@ async def run(bot, message):
 @Client.on_callback_query(filters.regex(r'^select_bot_'))
 async def select_bot_callback(bot, query):
     bot_id = int(query.data.split('_')[2])
+    user_id = query.from_user.id
     await query.message.delete()
-    await choose_target_chat(bot, query.message, bot_id)
+    await choose_target_chat(bot, query.message, user_id, bot_id)
 
-async def choose_target_chat(bot, message, bot_id):
+async def choose_target_chat(bot, message, user_id, bot_id):
     buttons = []
-    user_id = message.from_user.id
     channels = await db.get_user_channels(user_id)
     if not channels:
        return await message.reply_text("Please Set A To Channel In /settings Before Forwarding")
