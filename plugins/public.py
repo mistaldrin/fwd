@@ -17,21 +17,25 @@ SYD_CHANNELS = ["norFederation"]
 @Client.on_message(filters.private & filters.command(["fwd", "forward"]))
 async def run(bot, message):
     user_id = message.from_user.id
-    # Filter for actual bots, not userbots, for the forward command
-    bots = [b for b in await db.get_bots(user_id) if b.get('is_bot')]
+    # Allow user to select from ANY available client (bot or userbot)
+    bots = await db.get_bots(user_id)
     if not bots:
-        return await message.reply("Yᴏᴜ Dɪᴅ Nᴏᴛ Aᴅᴅᴇᴅ Aɴʏ Bᴏᴛ. Pʟᴇᴀꜱᴇ Aᴅᴅ A Bᴏᴛ Uꜱɪɴɢ /settings !")
+        return await message.reply("Yᴏᴜ Dɪᴅ Nᴏᴛ Aᴅᴅᴇᴅ Aɴʏ Bᴏᴛ ᴏʀ Usᴇʀʙᴏᴛ. Pʟᴇᴀꜱᴇ Aᴅᴅ Oɴᴇ Uꜱɪɴɢ /settings !")
 
     if len(bots) == 1:
-        # Store the selected bot ID for the user
+        # Store the selected bot/userbot ID for the user
         temp.FORWARD_BOT_ID[user_id] = bots[0]['id']
         await choose_target_chat(bot, message, bots[0]['id'])
     else:
         buttons = []
         for _bot in bots:
-            buttons.append([InlineKeyboardButton(_bot['name'], callback_data=f"select_bot_{_bot['id']}")])
+            # Display name correctly for bots and userbots
+            name = _bot.get('name', 'Unnamed')
+            bot_type = "BOT" if _bot.get('is_bot') else "USER"
+            buttons.append([InlineKeyboardButton(f"{name} ({bot_type})", callback_data=f"select_bot_{_bot['id']}")])
         buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="close_btn")])
-        await message.reply_text("<b><u>Select a Bot</u></b>\n\nChoose the bot you want to use for forwarding.", reply_markup=InlineKeyboardMarkup(buttons))
+        await message.reply_text("<b><u>Select a Client</u></b>\n\nChoose the Bot or Userbot you want to use for forwarding.", reply_markup=InlineKeyboardMarkup(buttons))
+
 
 @Client.on_callback_query(filters.regex(r'^select_bot_'))
 async def select_bot_callback(bot, query):
@@ -134,6 +138,10 @@ async def show_fwd_confirmation(bot, session_id, forward_all=False):
         return
 
     _bot = await db.get_bot(user_id, bot_id)
+    if not _bot:
+        await bot.send_message(session['chat_id'], "Error: Could not retrieve bot details. Please check settings.")
+        return
+        
     channels = await db.get_user_channels(user_id)
     to_title = next((c['title'] for c in channels if c['chat_id'] == session['to_chat_id']), 'Unknown')
 
@@ -151,6 +159,9 @@ async def show_fwd_confirmation(bot, session_id, forward_all=False):
     if session['order'] == 'desc' and not forward_all:
         start_id, end_id = end_id, start_id
 
+    # Safely get bot username
+    bot_username = _bot.get('username', 'username_not_set')
+
     buttons = [[
         InlineKeyboardButton('Yᴇꜱ', callback_data=f"start_public_{forward_id}"),
         InlineKeyboardButton('Nᴏ', callback_data="close_btn")
@@ -160,7 +171,7 @@ async def show_fwd_confirmation(bot, session_id, forward_all=False):
         chat_id=session['chat_id'],
         text=Translation.DOUBLE_CHECK.format(
             botname=_bot['name'],
-            botuname=_bot['username'],
+            botuname=bot_username,
             from_chat=session['from_title'],
             to_chat=to_title,
             message_range=message_range_text
