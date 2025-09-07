@@ -188,7 +188,7 @@ async def process_source_chat(bot: Client, message: Message, user_id: int, bot_i
         from_chat_id = source_input
 
     try:
-        # CORRECTED LOGIC: Use the selected client for the lookup.
+        # Use the bot/userbot selected by the user for the lookup
         bot_config = await db.get_bot(user_id, bot_id)
         if not bot_config:
             return await message.reply("Selected bot/userbot configuration not found.")
@@ -198,10 +198,14 @@ async def process_source_chat(bot: Client, message: Message, user_id: int, bot_i
             from_title = chat_info.title
             
             last_msg_id = 0
-            async for last_message in lookup_client.get_chat_history(chat_info.id, limit=1):
+            # Use search_messages which is allowed for bots, to find the latest message.
+            async for last_message in lookup_client.search_messages(chat_info.id, limit=1, query=""):
                 last_msg_id = last_message.id
                 break
-        
+            
+            if last_msg_id == 0:
+                return await message.reply("Could not find any messages in the source chat. It might be empty or the bot may lack permissions to read it.")
+
         await start_range_selection(
             bot=bot, user_id=user_id, chat_id=user_id,
             from_chat_id=chat_info.id, from_title=from_title,
@@ -212,7 +216,7 @@ async def process_source_chat(bot: Client, message: Message, user_id: int, bot_i
     except (UsernameInvalid, PeerIdInvalid, ChannelInvalid) as e:
         await message.reply(f"Could not find the source chat: `{e}`. Ensure the selected bot/userbot has access.")
     except Exception as e:
-        await message.reply(f"An error occurred: {e}\n\nThis can happen if you selected a regular bot that is not an admin in the source channel.")
+        await message.reply(f"An error occurred: {e}")
 
 
 # ------------------------------------------------------------------------------------
