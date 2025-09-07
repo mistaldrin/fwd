@@ -17,11 +17,14 @@ SYD_CHANNELS = ["norFederation"]
 @Client.on_message(filters.private & filters.command(["fwd", "forward"]))
 async def run(bot, message):
     user_id = message.from_user.id
-    bots = await db.get_bots(user_id)
+    # Filter for actual bots, not userbots, for the forward command
+    bots = [b for b in await db.get_bots(user_id) if b.get('is_bot')]
     if not bots:
         return await message.reply("Yᴏᴜ Dɪᴅ Nᴏᴛ Aᴅᴅᴇᴅ Aɴʏ Bᴏᴛ. Pʟᴇᴀꜱᴇ Aᴅᴅ A Bᴏᴛ Uꜱɪɴɢ /settings !")
 
     if len(bots) == 1:
+        # Store the selected bot ID for the user
+        temp.FORWARD_BOT_ID[user_id] = bots[0]['id']
         await choose_target_chat(bot, message, bots[0]['id'])
     else:
         buttons = []
@@ -32,7 +35,10 @@ async def run(bot, message):
 
 @Client.on_callback_query(filters.regex(r'^select_bot_'))
 async def select_bot_callback(bot, query):
+    user_id = query.from_user.id
     bot_id = int(query.data.split('_')[2])
+    # Store the selected bot ID for the user
+    temp.FORWARD_BOT_ID[user_id] = bot_id
     await query.message.delete()
     await choose_target_chat(bot, query.message, bot_id)
 
@@ -68,7 +74,8 @@ async def get_target_chat(bot, query):
     toid = int(query.data.split('_')[2])
     bot_id = int(query.data.split('_')[3])
 
-    temp.FORWARD_BOT_ID = bot_id
+    # Store bot_id in a user-specific way
+    temp.FORWARD_BOT_ID[user_id] = bot_id
 
     await query.message.delete()
 
@@ -120,7 +127,12 @@ async def show_fwd_confirmation(bot, session_id, forward_all=False):
     if not session: return
 
     user_id = session['user_id']
-    bot_id = temp.FORWARD_BOT_ID
+    bot_id = temp.FORWARD_BOT_ID.get(user_id)
+    if not bot_id:
+        # This case should ideally not happen if the flow is correct
+        await bot.send_message(session['chat_id'], "Error: Bot selection was lost. Please start over.")
+        return
+
     _bot = await db.get_bot(user_id, bot_id)
     channels = await db.get_user_channels(user_id)
     to_title = next((c['title'] for c in channels if c['chat_id'] == session['to_chat_id']), 'Unknown')
