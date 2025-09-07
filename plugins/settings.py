@@ -18,7 +18,7 @@ async def settings(client, message):
     if ban_status["is_banned"]:
         return await message.reply_text(f"Access denied.\n\nReason: {ban_status['ban_reason']}")
 
-    text="<b>❖ Settings ❖</b>\n\nManage personal configurations."
+    text="<b>֎ Settings ֎</b>\n\nManage personal configurations."
     await message.reply_text(
         text=text,
         reply_markup=main_buttons(),
@@ -37,7 +37,7 @@ async def settings_query(bot, query):
 
     if type=="main":
        await query.message.edit_text(
-         "<b>❖ Settings ❖</b>\n\nManage personal configurations.",
+         "<b>֎ Settings ֎</b>\n\nManage personal configurations.",
          reply_markup=main_buttons())
 
     elif type=="bots":
@@ -59,7 +59,7 @@ async def settings_query(bot, query):
        buttons.append([InlineKeyboardButton('« Back',
                         callback_data="settings#main")])
        await query.message.edit_text(
-         "<b>❖ Bots & Userbots ❖</b>\n\nManage connected bots and userbots.",
+         "<b>֎ Bots & Userbots ֎</b>\n\nManage connected bots and userbots.",
          reply_markup=InlineKeyboardMarkup(buttons))
 
     elif type=="addbot":
@@ -89,7 +89,7 @@ async def settings_query(bot, query):
        buttons.append([InlineKeyboardButton('« Back',
                         callback_data="settings#main")])
        await query.message.edit_text(
-         "<b>❖ Target Channels ❖</b>\n\nManage target chats for forwarding.",
+         "<b>֎ Target Channels ֎</b>\n\nManage target chats for forwarding.",
          reply_markup=InlineKeyboardMarkup(buttons))
 
     elif type=="addchannel":
@@ -163,7 +163,7 @@ async def settings_query(bot, query):
                  ],
                  [InlineKeyboardButton('« Back', callback_data="settings#channels")]]
        await query.message.edit_text(
-          f"<b>❖ Channel Details ❖</b>\n\n<b>Title:</b> <code>{chat['title']}</code>\n<b>ID:</b> <code>{chat['chat_id']}</code>\n<b>Username:</b> {chat['username']}",
+          f"<b>֎ Channel Details ֎</b>\n\n<b>Title:</b> <code>{chat['title']}</code>\n<b>ID:</b> <code>{chat['chat_id']}</code>\n<b>Username:</b> {chat['username']}",
           reply_markup=InlineKeyboardMarkup(buttons))
 
     elif type.startswith("removechannel"):
@@ -188,7 +188,7 @@ async def settings_query(bot, query):
        buttons.append([InlineKeyboardButton('« Back',
                         callback_data="settings#main")])
        await query.message.edit_text(
-          "<b>❖ Custom Caption ❖</b>\n\nSet a custom caption for forwarded media.\n\n<b>Placeholders:</b>\n<code>{filename}</code>, <code>{size}</code>, <code>{caption}</code>",
+          "<b>֎ Custom Caption ֎</b>\n\nSet a custom caption for forwarded media.\n\n<b>Placeholders:</b>\n<code>{filename}</code>, <code>{size}</code>, <code>{caption}</code>",
           reply_markup=InlineKeyboardMarkup(buttons))
 
     elif type=="seecaption":
@@ -247,7 +247,7 @@ async def settings_query(bot, query):
        buttons.append([InlineKeyboardButton('« Back',
                         callback_data="settings#main")])
        await query.message.edit_text(
-          "<b>❖ Custom Button ❖</b>\n\nAttach an inline URL button to messages.\n\n<b>Format:</b>\n`[Button Text][buttonurl:https://example.com]`",
+          "<b>֎ Custom Button ֎</b>\n\nAttach an inline URL button to messages.\n\n<b>Format:</b>\n`[Button Text][buttonurl:https://example.com]`",
           reply_markup=InlineKeyboardMarkup(buttons))
 
     elif type=="addbutton":
@@ -294,7 +294,7 @@ async def settings_query(bot, query):
        buttons.append([InlineKeyboardButton('« Back',
                         callback_data="settings#main")])
        await query.message.edit_text(
-          "<b>❖ Database ❖</b>\n\nA MongoDB database is needed to save duplicate file records permanently.",
+          "<b>֎ Database ֎</b>\n\nA MongoDB database is needed to save duplicate file records permanently.",
           reply_markup=InlineKeyboardMarkup(buttons))
 
     elif type=="addurl":
@@ -323,7 +323,7 @@ async def settings_query(bot, query):
 
     elif type=="filters":
        await query.message.edit_text(
-          "<b>❖ Message Filters ❖</b>\n\nConfigure which message types to forward.",
+          "<b>֎ Message Filters ֎</b>\n\nConfigure which message types to forward.",
           reply_markup=await filters_buttons(user_id))
 
     elif type=="nextfilters":
@@ -347,7 +347,7 @@ async def settings_query(bot, query):
       size = settings.get('file_size', 0)
       i, limit = size_limit(settings['size_limit'])
       await query.message.edit_text(
-         f'<b>❖ Size Limit ❖</b>\n\nSet a file size limit for forwarding.\n\nStatus: Files {limit} `{size} MB` will be forwarded.',
+         f'<b>֎ Size Limit ֎</b>\n\nSet a file size limit for forwarding.\n\nStatus: Files {limit} `{size} MB` will be forwarded.',
          reply_markup=size_button(size))
 
     elif type.startswith("update_size"):
@@ -360,7 +360,7 @@ async def settings_query(bot, query):
       await update_configs(user_id, 'file_size', size)
       i, limit = size_limit((await get_configs(user_id))['size_limit'])
       await query.message.edit_text(
-         f'<b>❖ Size Limit ❖</b>\n\nSet a file size limit for forwarding.\n\nStatus: Files {limit} `{size} MB` will be forwarded.',
+         f'<b>֎ Size Limit ֎</b>\n\nSet a file size limit for forwarding.\n\nStatus: Files {limit} `{size} MB` will be forwarded.',
          reply_markup=size_button(int(size)))
 
     elif type.startswith('update_limit'):
@@ -368,7 +368,7 @@ async def settings_query(bot, query):
       limit, sts = size_limit(limit)
       await update_configs(user_id, 'size_limit', limit)
       await query.message.edit_text(
-         f'<b>❖ Size Limit ❖</b>\n\nSet a file size limit for forwarding.\n\nStatus: Files {sts} `{size} MB` will be forwarded.',
+         f'<b>֎ Size Limit ֎</b>\n\nSet a file size limit for forwarding.\n\nStatus: Files {sts} `{size} MB` will be forwarded.',
          reply_markup=size_button(int(size)))
 
     elif type == "add_extension":
@@ -397,7 +397,7 @@ async def settings_query(bot, query):
       btn.append([InlineKeyboardButton('Remove All', 'settings#rmve_all_extension')])
       btn.append([InlineKeyboardButton('« Back', 'settings#main')])
       await query.message.edit_text(
-          text='<b>❖ Extension Filter ❖</b>\n\nFiles with these extensions will not be forwarded.',
+          text='<b>֎ Extension Filter ֎</b>\n\nFiles with these extensions will not be forwarded.',
           reply_markup=InlineKeyboardMarkup(btn))
 
     elif type == "rmve_all_extension":
@@ -430,7 +430,7 @@ async def settings_query(bot, query):
       btn.append([InlineKeyboardButton('Remove All', 'settings#rmve_all_keyword')])
       btn.append([InlineKeyboardButton('« Back', 'settings#main')])
       await query.message.edit_text(
-          text='<b>❖ Keyword Filter ❖</b>\n\nFiles with these keywords in the file name will be forwarded.',
+          text='<b>֎ Keyword Filter ֎</b>\n\nFiles with these keywords in the file name will be forwarded.',
           reply_markup=InlineKeyboardMarkup(btn))
 
     elif type == "rmve_all_keyword":
