@@ -37,7 +37,9 @@ async def settings_query(bot, query):
        buttons = [] 
        _bot = await db.get_bot(user_id)
        if _bot is not None:
-          buttons.append([InlineKeyboardButton(_bot['name'],
+          # Use .get() for safety to prevent KeyError if 'name' is missing
+          bot_name = _bot.get('name', 'Unnamed Bot')
+          buttons.append([InlineKeyboardButton(bot_name,
                            callback_data=f"settings#editbot")])
        else:
           buttons.append([InlineKeyboardButton('⨁ Aᴅᴅ Bᴏᴛ ⨁', 
@@ -116,12 +118,25 @@ async def settings_query(bot, query):
     
     elif type=="editbot": 
        _bot = await db.get_bot(user_id)
-       TEXT = Translation.BOT_DETAILS if _bot.get('is_bot') else Translation.USER_DETAILS
+       if not _bot:
+           await query.message.edit_text("Bot configuration not found. It might have been removed.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data="settings#bots")]]))
+           return
+
+       # Use .get() for all dictionary access to prevent KeyErrors
+       bot_name = _bot.get('name', 'N/A')
+       bot_id = _bot.get('id', 'N/A')
+       bot_uname = _bot.get('username')
+       is_bot = _bot.get('is_bot', True)
+
+       TEXT = Translation.BOT_DETAILS if is_bot else Translation.USER_DETAILS
+       # Handle cases where username is None
+       uname_display = f"@{bot_uname}" if bot_uname else "Not Set"
+
        buttons = [[InlineKeyboardButton('⛒ Rᴇᴍᴏᴠᴇ ⛒', callback_data=f"settings#removebot")
                  ],
                  [InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data="settings#bots")]]
        await query.message.edit_text(
-          TEXT.format(_bot['name'], _bot['id'], _bot['username']),
+          TEXT.format(bot_name, bot_id, uname_display),
           reply_markup=InlineKeyboardMarkup(buttons))
                                                
     elif type=="removebot":
@@ -414,7 +429,7 @@ async def settings_query(bot, query):
 
   except Exception as e:
       print(f"Error in settings_query: {e}")
-      # Optionally, notify the user that an error occurred
+      # Notify the user that an error occurred
       await query.message.reply_text("An unexpected error occurred. Please try again later.")
 
       
