@@ -22,6 +22,33 @@ logger.setLevel(logging.INFO)
 
 BOT_TOKEN_TEXT = "1. Go to @BotFather and send `/newbot`.\n\n2. Get the bot token from the reply.\n\n3. Forward that message here or just send the token.\n\nEasy peasy. (´｡• ᵕ •｡`)"
 SESSION_STRING_SIZE = 351
+BTN_URL_REGEX = re.compile(r"(\[([^\[]+?)]\[buttonurl:/{0,2}(.+?)(:same)?])")
+
+
+def parse_buttons(text, markup=True):
+    """Parses button markdown into a Pyrogram InlineKeyboardMarkup."""
+    buttons = []
+    if not text:
+        return None
+    for match in BTN_URL_REGEX.finditer(text):
+        n_escapes = 0
+        to_check = match.start(1) - 1
+        while to_check > 0 and text[to_check] == "\\":
+            n_escapes += 1
+            to_check -= 1
+
+        if n_escapes % 2 == 0:
+            if bool(match.group(4)) and buttons:
+                buttons[-1].append(InlineKeyboardButton(
+                    text=match.group(2),
+                    url=match.group(3).replace(" ", "")))
+            else:
+                buttons.append([InlineKeyboardButton(
+                    text=match.group(2),
+                    url=match.group(3).replace(" ", ""))])
+    if markup and buttons:
+       buttons = InlineKeyboardMarkup(buttons)
+    return buttons if buttons else None
 
 async def start_clone_bot(FwdBot, data=None):
    """Starts the client and patches the iter_messages method."""
@@ -119,3 +146,48 @@ class CLIENT:
      }
      await db.add_bot(details)
      return True
+    
+@Client.on_message(filters.private & filters.command('reset'))
+async def reset_user_settings(bot, m):
+    """Resets a user's settings to default."""
+    default = await db.get_configs("01") # Using a non-user specific ID to get defaults
+    await db.update_configs(m.from_user.id, default)
+    await m.reply("Settings have been reset. ✓")
+
+@Client.on_message(filters.command('resetall') & filters.user(Config.OWNER_ID))
+async def reset_all_users_settings(bot, message):
+    """(Owner only) Resets specific settings for all users."""
+    users = await db.get_all_users()
+    sts = await message.reply("Processing...")
+    TEXT = "Total: {}\nSuccess: {}\nFailed: {}"
+    total = success = failed = 0
+    ERRORS = []
+    async for user in users:
+        user_id = user['id']
+        default = await get_configs(user_id)
+        default['db_uri'] = None # Example: resetting db_uri
+        total += 1
+        if total % 10 == 0:
+           await sts.edit(TEXT.format(total, success, failed))
+        try: 
+           await db.update_configs(user_id, default)
+           success += 1
+        except Exception as e:
+           ERRORS.append(e)
+           failed += 1
+    if ERRORS:
+       await message.reply(ERRORS[:100])
+    await sts.edit("Completed\n" + TEXT.format(total, success, failed))
+  
+async def get_configs(user_id):
+    """Retrieves user configurations from the database."""
+    return await db.get_configs(user_id)
+
+async def update_configs(user_id, key, value):
+    """Updates a specific configuration key for a user."""
+    current = await db.get_configs(user_id)
+    if key in ['caption', 'duplicate', 'db_uri', 'forward_tag', 'protect', 'file_size', 'size_limit', 'extension', 'keywords', 'button', 'forward_delay']:
+       current[key] = value
+    elif key in current.get('filters', {}):
+       current['filters'][key] = value
+    await db.update_configs(user_id, current)
