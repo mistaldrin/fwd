@@ -23,7 +23,48 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 TEXT = Translation.TEXT
 
-# The iter_messages patch has been removed. We will use the standard get_chat_history.
+
+async def process_messages_in_batches(client, from_chat, message_ids_generator, user, m, sts, forward_tag, caption, button, protect, forward_delay):
+    """Helper function to process messages in batches to conserve memory."""
+    MSG_batch = []
+    pling = 0
+    
+    async for message in message_ids_generator:
+        if await is_cancelled(client, user, m, sts):
+            return "cancelled"
+        
+        if pling % 20 == 0: 
+            await edit(m, 'Pʀᴏɢʀᴇꜱꜱɪɴɢ', 10, sts)
+        pling += 1
+        sts.add('fetched')
+
+        if not message or message.empty or message.service:
+            sts.add('deleted')
+            continue
+        
+        # Add duplicate/filter checks here if needed in the future
+
+        if forward_tag:
+            MSG_batch.append(message.id)
+            if len(MSG_batch) >= 100:
+                await forward(client, MSG_batch, m, sts, protect)
+                sts.add('total_files', len(MSG_batch))
+                await asyncio.sleep(forward_delay)
+                MSG_batch = []
+        else:
+            new_caption = custom_caption(message, caption)
+            details = {"msg_id": message.id, "media": media(message), "caption": new_caption, 'button': button, "protect": protect}
+            await copy(client, details, m, sts)
+            sts.add('total_files')
+            await asyncio.sleep(forward_delay)
+            
+    # Process the final batch
+    if forward_tag and MSG_batch:
+        await forward(client, MSG_batch, m, sts, protect)
+        sts.add('total_files', len(MSG_batch))
+
+    return "completed"
+
 
 @Client.on_callback_query(filters.regex(r'^start_public'))
 async def pub_(bot, message):
@@ -50,17 +91,9 @@ async def pub_(bot, message):
     await msg_edit(m, "Processing...")
     try: 
        chat = await client.get_chat(i.FROM)
-       if chat.type == ChatType.PRIVATE:
-           try:
-              await client.join_chat(i.FROM)
-           except UserNotParticipant:
-               return await msg_edit(m, f"Source Chat Is A Private Channel / Group. Please make your userbot a member or your bot an admin there.", wait=True)
-    except (PrivateChat, ChannelPrivate, ChannelInvalid, PeerIdInvalid) as e:
+    except (PrivateChat, ChannelPrivate, ChannelInvalid, PeerIdInvalid, UsernameInvalid) as e:
        await stop(client, user)
        return await msg_edit(m, f"Source chat may be private or invalid. Error: {e}", retry_btn(frwd_id), True)
-    except ChatAdminRequired:
-       await stop(client, user)
-       return await msg_edit(m, f"Please Make Your Bot Admin In Source Channel With Full Permissions", retry_btn(frwd_id), True)
     try:
        k = await client.send_message(i.TO, "Tᴇꜱᴛɪɴɢ......")
        await k.delete()
@@ -72,66 +105,51 @@ async def pub_(bot, message):
     await db.add_frwd(user)
     await send(client, user, "Fᴏʀᴡᴀʀᴅɪɴɢ Sᴛᴀʀᴛᴇᴅ 🗝️")
     sts.add(time=True)
-    forward_delay = data.get('forward_delay', 1.0) # Use the new configurable delay
+    forward_delay = data.get('forward_delay', 1.0)
     await msg_edit(m, "Pʀᴏᴄᴄᴇꜱꜱɪɴɢ...") 
     temp.IS_FRWD_CHAT.append(i.TO)
     temp.lock[user] = locked = True
     if locked:
         try:
-          MSG = []
-          pling=0
-          await edit(m, 'Pʀᴏɢʀᴇꜱꜱꜱɪɴɢ', 10, sts)
-          print(f"Starting Forwarding Process... From :{sts.get('FROM')} To: {sts.get('TO')} Total: {sts.get('limit')} Stats : {sts.get('skip')})")
-          
-          # Fetch messages in batches and reverse them to forward in chronological order
-          messages_to_process = []
-          async for message in client.get_chat_history(
-            chat_id=sts.get('FROM'), 
-            limit=int(sts.get('limit')), 
-            offset=int(sts.get('skip')) if sts.get('skip') else 0
-            ):
-              messages_to_process.append(message)
-          
-          # Reverse the list to get oldest messages first
-          messages_to_process.reverse()
-          
-          for message in messages_to_process:
-                if await is_cancelled(client, user, m, sts):
-                   return
-                if pling %20 == 0: 
-                   await edit(m, 'Pʀᴏɢʀᴇꜱꜱɪɴɢ', 10, sts)
-                pling += 1
-                sts.add('fetched')
-                if message == "DUPLICATE":
-                   sts.add('duplicate')
-                   continue 
-                elif message == "FILTERED":
-                   sts.add('filtered')
-                   continue 
-                if message.empty or message.service:
-                   sts.add('deleted')
-                   continue
-                if forward_tag:
-                   MSG.append(message.id)
-                   notcompleted = len(MSG)
-                   completed = sts.get('total') - sts.get('fetched')
-                   if ( notcompleted >= 100 
-                        or completed <= 100): 
-                      await forward(client, MSG, m, sts, protect)
-                      sts.add('total_files', notcompleted)
-                      await asyncio.sleep(forward_delay)
-                      MSG = []
-                else:
-                   new_caption = custom_caption(message, caption)
-                   details = {"msg_id": message.id, "media": media(message), "caption": new_caption, 'button': button, "protect": protect}
-                   await copy(client, details, m, sts)
-                   sts.add('total_files')
-                   await asyncio.sleep(forward_delay) 
+            await edit(m, 'Pʀᴏɢʀᴇꜱꜱꜱɪɴɢ', 10, sts)
+            
+            # Decide fetching strategy based on whether a custom range was set
+            if i.start_id is None: # Forward All
+                message_generator = client.get_chat_history(i.FROM)
+            else: # Forward Custom Range
+                start_id = min(i.start_id, i.end_id)
+                end_id = max(i.start_id, i.end_id)
+                
+                # Generator for message IDs to avoid storing large lists in memory
+                message_id_generator = range(start_id, end_id + 1)
+                
+                async def message_fetcher_generator():
+                    batch = []
+                    for msg_id in message_id_generator:
+                        batch.append(msg_id)
+                        if len(batch) == 100:
+                            messages_chunk = await client.get_messages(i.FROM, batch)
+                            for msg in messages_chunk:
+                                yield msg
+                            batch = []
+                    if batch:
+                        messages_chunk = await client.get_messages(i.FROM, batch)
+                        for msg in messages_chunk:
+                            yield msg
+                
+                message_generator = message_fetcher_generator()
+
+            result = await process_messages_in_batches(client, i.FROM, message_generator, user, m, sts, forward_tag, caption, button, protect, forward_delay)
+            if result == "cancelled":
+                return # Stop further execution
+
         except Exception as e:
+            logger.error(f"Forwarding failed: {e}", exc_info=True)
             await msg_edit(m, f'<b>Error :</b>\n<code>{e}</code>', wait=True)
-            temp.IS_FRWD_CHAT.remove(sts.TO)
+            temp.IS_FRWD_CHAT.remove(i.TO)
             return await stop(client, user)
-        temp.IS_FRWD_CHAT.remove(sts.TO)
+        
+        temp.IS_FRWD_CHAT.remove(i.TO)
         await send(client, user, "Fᴏʀᴡᴀʀᴅɪɴɢ Cᴏᴍᴩʟᴇᴛᴇᴅ 😇")
         await edit(m, 'Completed', "completed", sts) 
         await stop(client, user)
@@ -197,13 +215,13 @@ async def msg_edit(msg, text, button=None, wait=None):
 async def edit(msg, title, status, sts):
    i = sts.get(full=True)
    status = 'Fᴏʀᴡᴀʀᴅɪɴɢ' if status == 10 else f"Sʟᴇᴇᴩɪɴɢ {status} s" if str(status).isnumeric() else status
-   percentage = "{:.0f}".format(float(i.fetched)*100/float(i.total))
+   percentage = "{:.0f}".format(float(i.fetched)*100/float(i.total)) if i.total > 0 else "0"
    
    now = time.time()
-   diff = int(now - i.start)
+   diff = int(now - i.start) if i.start > 0 else 1
    speed = sts.divide(i.fetched, diff)
    elapsed_time = round(diff) * 1000
-   time_to_completion = round(sts.divide(i.total - i.fetched, int(speed))) * 1000
+   time_to_completion = round(sts.divide(i.total - i.fetched, int(speed))) * 1000 if speed > 0 else 0
    estimated_total_time = elapsed_time + time_to_completion  
    progress = "▰{0}{1}".format(
        ''.join(["▰" for i in range(math.floor(int(percentage) / 10))]),
@@ -212,7 +230,8 @@ async def edit(msg, title, status, sts):
    estimated_total_time = TimeFormatter(milliseconds=estimated_total_time)
    estimated_total_time = estimated_total_time if estimated_total_time != '' else '0 s'
 
-   text = TEXT.format(i.fetched, i.total_files, i.duplicate, i.deleted, i.skip, status, percentage, estimated_total_time, progress)
+   # The 'skip' field is no longer relevant with the new range system
+   text = Translation.TEXT.format(i.total, i.fetched, i.total_files, i.duplicate, i.deleted, i.filtered, status, percentage, progress)
    if status in ["cancelled", "completed"]:
       button.append(
          [InlineKeyboardButton('Channel', url='https://t.me/norFederation'),
@@ -262,13 +281,16 @@ def custom_caption(msg, caption):
   return None
 
 def get_size(size):
-  units = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB"]
-  size = float(size)
-  i = 0
-  while size >= 1024.0 and i < len(units):
-     i += 1
-     size /= 1024.0
-  return "%.2f %s" % (size, units[i]) 
+  try:
+    units = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB"]
+    size = float(size)
+    i = 0
+    while size >= 1024.0 and i < len(units):
+        i += 1
+        size /= 1024.0
+    return "%.2f %s" % (size, units[i])
+  except:
+    return "N/A"
 
 def media(msg):
   if msg.media:
@@ -316,4 +338,7 @@ async def status_msg(bot, msg):
 async def close(bot, update):
     await update.answer()
     await update.message.delete()
-    await update.message.reply_to_message.delete()
+    try:
+        await update.message.reply_to_message.delete()
+    except:
+        pass
