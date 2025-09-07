@@ -10,7 +10,7 @@ from pyrogram import Client, filters, enums, __version__ as pyrogram_version
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaDocument
 from .test import update_configs
 
-SYD = ["https://files.catbox.moe/mq4f9j.jpg", "https://files.catbox.moe/mq4f9j.jpg"]
+SYD = ["https://files.catbox.moe/3lwlbm.png"]
 
 main_buttons = [[
         InlineKeyboardButton('Help', callback_data='help'),
