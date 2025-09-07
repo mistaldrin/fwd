@@ -63,7 +63,7 @@ async def select_userbot_unequify(bot: Client, query: CallbackQuery):
 async def unequify_continue(bot: Client, message: Message, userbot_id: int):
     user_id = message.from_user.id
     # Use the per-user session dictionary
-    temp.USERBOT_SESSIONS[user_id] = userbot_id
+    temp.UNEQUIFY_USERBOT_ID[user_id] = userbot_id
 
     if len(message.command) < 2:
         # Show interactive menu if no target is provided
@@ -176,7 +176,7 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
 
     elif data == "select_from_userbot":
         # Get the userbot_id from the user-specific session
-        userbot_id = temp.USERBOT_SESSIONS.get(user_id)
+        userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
         if not userbot_id:
             return await query.message.edit("Error: Could not determine which userbot to use. Please start over.")
 
@@ -256,7 +256,7 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
         return await status_message.edit_text("Error: Session expired or invalid.")
 
     # Get userbot_id from the user-specific session
-    userbot_id = temp.USERBOT_SESSIONS.pop(user_id, None)
+    userbot_id = temp.UNEQUIFY_USERBOT_ID.pop(user_id, None)
     if not userbot_id:
         return await status_message.edit_text("Error: Could not determine which userbot to use. Please start over.")
 
