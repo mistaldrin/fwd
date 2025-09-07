@@ -1,205 +1,119 @@
-import motor.motor_asyncio
-from pymongo import MongoClient
+import os
 from config import Config
-from os import environ
 
-DB_NAME = Config.DB_NAME
-DB_URL = Config.DB_URL
+class Translation(object):
+  START_TXT = """wassup {}
 
-async def mongodb_version():
-    x = MongoClient(Config.DB_URL)
-    mongodb_version = x.server_info()['version']
-    return mongodb_version
+<i>Personal Past Forwarding Bot</i>
 
-class Database:
-
-    def __init__(self, uri, database_name):
-        self._client = motor.motor_asyncio.AsyncIOMotorClient(uri)
-        self.db = self._client[database_name]
-        self.bot = self.db.bots
-        self.col = self.db.user
-        self.nfy = self.db.notify
-        self.chl = self.db.channels
-
-    def new_user(self, id, name):
-        return dict(
-            id = id,
-            name = name,
-            ban_status=dict(
-                is_banned=False,
-                ban_reason="",
-            ),
-        )
-
-    async def add_user(self, id, name):
-        user = self.new_user(id, name)
-        await self.col.insert_one(user)
-
-    async def is_user_exist(self, id):
-        user = await self.col.find_one({'id':int(id)})
-        return bool(user)
-
-    async def total_users_bots_count(self):
-        bcount = await self.bot.count_documents({})
-        count = await self.col.count_documents({})
-        return count, bcount
-
-    async def total_channels(self):
-        count = await self.chl.count_documents({})
-        return count
-
-    async def remove_ban(self, id):
-        ban_status = dict(
-            is_banned=False,
-            ban_reason=''
-        )
-        await self.col.update_one({'id': id}, {'$set': {'ban_status': ban_status}})
-
-    async def ban_user(self, user_id, ban_reason="No Reason"):
-        ban_status = dict(
-            is_banned=True,
-            ban_reason=ban_reason
-        )
-        await self.col.update_one({'id': user_id}, {'$set': {'ban_status': ban_status}})
-
-    async def get_ban_status(self, id):
-        default = dict(
-            is_banned=False,
-            ban_reason=''
-        )
-        user = await self.col.find_one({'id':int(id)})
-        if not user:
-            return default
-        return user.get('ban_status', default)
-
-    async def get_all_users(self):
-        return self.col.find({})
-
-    async def delete_user(self, user_id):
-        await self.col.delete_many({'id': int(user_id)})
-        
-    async def reset_user_data(self, user_id):
-        """ Resets a user's entire configuration to default. """
-        # Delete user's main config, bots, and channels
-        await self.col.delete_many({'id': int(user_id)})
-        await self.bot.delete_many({'user_id': int(user_id)})
-        await self.chl.delete_many({'user_id': int(user_id)})
-        
-        # Re-add the user with a fresh document
-        user = await self.is_user_exist(user_id)
-        if not user:
-             # This part is for re-adding the user, you might need to get their first name again
-             # For simplicity, we can just re-add with their ID.
-             # In a real scenario, you'd prompt them to /start again.
-             await self.add_user(user_id, str(user_id))
+<b>Click '⊛ Hᴇʟᴩ ⊛' for... Help duh...</b>"""
 
 
-    async def get_banned(self):
-        users = self.col.find({'ban_status.is_banned': True})
-        b_users = [user['id'] async for user in users]
-        return b_users
+  HELP_TXT = """<b><u>⋈ Hᴇʟᴩ</b></u>
 
-    async def update_configs(self, id, configs):
-        await self.col.update_one({'id': int(id)}, {'$set': {'configs': configs}})
+<b><u>≍ Aᴠᴀɪʟᴀʙʟᴇ Cᴏᴍᴍᴀɴᴅꜱ :</u></b>
+⏣ __/start - Cʜᴇᴄᴋ I'ᴍ Aʟɪᴠᴇ__ 
+⏣ __/forward - Fᴏʀᴡᴀʀᴅ Mᴇꜱꜱᴀɢᴇꜱ Iɴ A Rᴀɴɢᴇ__
+⏣ __/unequify - Dᴇʟᴇᴛᴇ Dᴜᴩʟɪᴄᴀᴛᴇ Mᴇꜱꜱᴀɢᴇꜱ Iɴ A Rᴀɴɢᴇ__
+⏣ __/ubclist - Lɪꜱᴛ Cʜᴀᴛꜱ Fʀᴏᴍ Yᴏᴜʀ Usᴇʀʙᴏᴛ__
+⏣ __/settings - Cᴏɴꜰɪɢᴜʀᴇ Yᴏᴜʀ Sᴇᴛᴛɪɴɢꜱ__
+⏣ __/reset - Rᴇꜱᴇᴛ Yᴏᴜʀ Sᴇᴛᴛɪɴɢꜱ__
+⏣ __/resetme - Rᴇsᴇᴛ Yᴏᴜʀ Pᴇʀsᴏɴᴀʟ Cᴏɴꜰɪɢᴜʀᴀᴛɪᴏɴ__
+⏣ __/forwardelay - Sᴇᴛ ᴀ ᴄᴜꜱᴛᴏᴍ ꜰᴏʀᴡᴀʀᴅɪɴɢ ᴅᴇʟᴀʏ__
 
-    async def get_configs(self, id):
-        default = {
-            'caption': None,
-            'duplicate': True,
-            'forward_tag': False,
-            'file_size': 0,
-            'size_limit': None,
-            'extension': None,
-            'keywords': None,
-            'protect': None,
-            'button': None,
-            'db_uri': None,
-            'filters': {
-               'poll': True,
-               'text': True,
-               'audio': True,
-               'voice': True,
-               'video': True,
-               'photo': True,
-               'document': True,
-               'animation': True,
-               'sticker': True
-            }
-        }
-        user = await self.col.find_one({'id':int(id)})
-        if user:
-            # Merge stored configs with default to prevent KeyErrors on missing keys
-            user_configs = user.get('configs', {})
-            # The default dictionary is the base
-            final_configs = default.copy()
-            # Update with user's saved settings
-            final_configs.update(user_configs)
-            # Ensure nested 'filters' dictionary is also merged
-            if 'filters' in user_configs:
-                final_configs['filters'] = default['filters'].copy()
-                final_configs['filters'].update(user_configs['filters'])
-            return final_configs
-        return default
+<b><u>≬≬ Fᴇᴀᴛᴜʀᴇꜱ :</b></u>
+► __Sᴇʟᴇᴄᴛ A Sᴘᴇᴄɪғɪᴄ Rᴀɴɢᴇ Oꜰ Mᴇssᴀɢᴇs Tᴏ Fᴏʀᴡᴀʀᴅ Oʀ Dᴇᴅᴜᴘʟɪᴄᴀᴛᴇ__
+► __Iɴᴛᴇʀᴀᴄᴛɪᴠᴇʟʏ Sᴇʟᴇᴄᴛ Cʜᴀᴛs Fᴏʀ Dᴇᴅᴜᴘʟɪᴄᴀᴛɪᴏɴ__
+► __Fᴏʀᴡᴀʀᴅ Mᴇꜱꜱᴀɢᴇ Fʀᴏᴍ Pᴜʙʟɪᴄ Cʜᴀɴɴᴇʟ To Yᴏᴜʀ Cʜᴀɴɴᴇʟ Wɪᴛʜᴏᴜᴛ Aᴅᴍɪɴ Peᴇʀᴍɪꜱꜱɪᴏɴ__
+► __Forward Message Fʀᴏᴍ Private Cʜᴀɴɴᴇʟ To Yᴏᴜʀ Cʜᴀɴɴᴇʟ Bʏ Uꜱɪɴɢ UꜱᴇʀBᴏᴛ__
+► __Cᴜꜱᴛᴏм Cᴀᴩᴛɪᴏɴ & Bᴜᴛᴛᴏɴ__
+► __Sᴜᴩᴩᴏʀᴛ Rᴇꜱᴛʀɪᴄᴛᴇḍ Cʜᴀᴛꜱ__
+► __Sᴋɪᴩ Dᴜᴩʟɪᴄᴀᴛᴇ Mᴇꜱꜱᴀɢᴇꜱ__
+"""
+  
+  HOW_USE_TXT = """<b><u>⚠️ Bᴇꜰᴏʀᴇ Fᴏʀᴡᴀʀᴅ :</b></u>
+  
+► __Aᴅᴅ A Bᴏᴛ Oʀ Uꜱᴇʀʙᴏᴛ__
+► __Aᴅᴅ Aᴛʟᴇᴀꜱᴛ Oɴᴇ Cʜᴀᴛ Tᴏ Cʜᴀɴɴᴇʟꜱ (Yᴏᴜʀ Bᴏᴛ/UꜱᴇʀBᴏᴛ Mᴜꜱᴛ Bᴇ Aᴅᴍɪɴ Tʜᴇʀᴇ)__
+► __Yᴏᴜ Cᴀɴ Aᴅᴅ Cʜᴀᴛꜱ Oʀ Bᴏᴛꜱ Bʏ Uꜱɪɴɢ /settings__
+► __Iꜰ Tʜᴇ **Fʀᴏᴍ Cʜᴀɴɴᴇʟ** Iꜱ Pʀɪᴠᴀᴛᴇ, Yᴏᴜʀ UꜱᴇʀBᴏᴛ Mᴜꜱᴛ Bᴇ A Mᴇᴍʙᴇʀ Iɴ Tʜᴇʀᴇ Oʀ Yᴏᴜʀ Bᴏᴛ Mᴜꜱᴛ Nᴇᴇᴅ Tᴏ Bᴇ Aᴅᴍɪɴ Iɴ Tʜᴇʀᴇ Aʟꜱᴏ__
+► __Tʜᴇɴ Uꜱᴇ /forward Tᴏ Fᴏʀᴡᴀʀᴅ Mᴇꜱꜱᴀɢᴇꜱ, Wʜᴇʀᴇ Iᴛ Aꜱᴋ Fᴏʀ Sᴏᴜʀᴄᴇ Cʜᴀᴛ Tᴏ Fᴏᴡᴀʀᴅ__"""
+  
+  ABOUT_TXT = """<b>⋉ Mʏ Nᴀᴍᴇ :</b> {}
+<b>⋉ Lᴀɴɢᴜᴀɢᴇ :</b> <a>English</a>
+<b>⋉ Lɪʙʀᴀʀʏ :</b> <a>Pyrogram</a>
+<b>⋉ Sᴇʀᴠᴇʀ :</b> <a>Koyeb</a>
+<b>⋉ Cʜᴀɴɴᴇʟ :</b> <a href='https://t.me/norFederation'>norFed</a>
+<b>⋉ Dᴇᴠᴇʟᴏᴩᴇʀ :</b> <a href='https://t.me/partDevil'>partDevil</a>"""
+  
+  STATUS_TXT = """<b><u>Bᴏᴛ Sᴛᴀᴛᴜꜱ:</u></b>
+  
+<b>⊛ Tᴏᴛᴀʟ Uꜱᴇʀꜱ :</b> <code>{}</code>
+<b>⚝ Tᴏᴛᴀʟ Bᴏᴛꜱ :</b> <code>{}</code>
+<b>❉ Fᴏʀᴡᴀʀᴅɪɴɢ :</b> <code>{}</code>
+"""
+  
+  FROM_MSG = "<b><u>Sᴇᴛ Sᴏᴜʀᴄᴇ Cʜᴀᴛ</></>\n\nForward The Last Mᴇꜱꜱᴀɢᴇ Or Last Mᴇꜱꜱᴀɢᴇ Lɪɴᴋ Oꜰ Sᴏᴜʀᴄᴇ Cʜᴀᴛ.\n/cancel - Tᴏ Cᴀɴᴄᴇʟ Tʜɪꜱ Pʀᴏᴄᴇꜱꜱ"
+  TO_MSG = "<b><u>Cʜᴏᴏꜱᴇ Tᴀʀɢᴇᴛ Cʜᴀᴛ</u></b>\n\nCʜᴏᴏꜱᴇ Yᴏᴜʀ Tᴀʀɢᴇᴛ Cʜᴀᴛ Fʀᴏᴍ Tʜᴇ Gɪᴠᴇɴ Bᴜᴛᴛᴏɴꜱ.\n/cancel - Tᴏ Cᴀɴᴄᴇʟ Tʜɪꜱ Pʀᴏᴄᴇꜱꜱ"
+  
+  RANGE_SELECTION_TXT = """<b><u>SELECT MESSAGE RANGE</u></b>
 
+You can either forward all messages by default or specify a custom range using the buttons below.
 
-    async def add_bot(self, datas):
-       await self.bot.insert_one(datas)
+<i>Note: Forwarding all messages from a very large channel may take a significant amount of time.</i>"""
 
-    async def remove_bot(self, user_id, bot_id):
-       await self.bot.delete_one({'user_id': int(user_id), 'id': int(bot_id)})
+  UNEQUIFY_START_TXT = """<b><u>Advanced Deduplicator</u></b>
 
-    async def get_bot(self, user_id: int, bot_id: int):
-       bot = await self.bot.find_one({'user_id': user_id, 'id': bot_id})
-       return bot if bot else None
+How would you like to select the target channel?
 
-    async def get_bots(self, user_id: int):
-        bots = self.bot.find({'user_id': user_id})
-        return [bot async for bot in bots]
+**Usage:** `/unequify [channel_username or chat_id]` for manual input."""
+  
+  CANCEL = "<b> Pʀᴏᴄᴇꜱꜱ Cᴀɴᴄᴇʟʟᴇᴅ Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ! </b>"
+  BOT_DETAILS = "<b><u>📄 Bᴏᴛ Dᴇᴛᴀɪʟꜱ</u></b>\n\n<b>➣ Nᴀᴍᴇ :</b> <code>{}</code>\n<b>➣ Bᴏᴛ ID :</b> <code>{}</code>\n<b>➣ Uꜱᴇʀɴᴀᴍᴇ :</b> {}"
+  USER_DETAILS = "<b><u>📄 UꜱᴇʀBᴏᴛ Dᴇᴛᴀɪʟꜱ</u></b>\n\n<b>➣ Nᴀᴍᴇ :</b> <code>{}</code>\n<b>➣ Uꜱᴇʀ ID :</b> <code>{}</code>\n<b>➣ Uꜱᴇʀɴᴀᴍᴇ :</b> {}"  
+         
+  TEXT = """<b><u>Fᴏʀᴡᴀʀᴅ Sᴛᴀᴛᴜꜱ</u></b>
+  
+<b>🎯 Total In Range:</b> <code>{total}</code>
+<b>🕵 Fᴇᴛᴄʜᴇᴅ Mᴇꜱꜱᴀɢᴇ :</b> <code>{}</code>
+<b>✅ Sᴜᴄᴄᴇꜱꜰᴜʟʟʏ Fᴏʀᴡᴀʀᴅ :</b> <code>{}</code>
+<b>👥 Dᴜʙʟɪᴄᴀᴛᴇ Mᴇꜱꜱᴀɢᴇ :</b> <code>{}</code>
+<b>🗑 Dᴇʟᴇᴛᴇᴅ Mᴇꜱꜱᴀɢᴇ :</b> <code>{}</code>
+<b>🔁 Fɪʟᴛᴇʀᴇᴅ Mᴇꜱꜱᴀɢᴇ :</b> <code>{}</code>
+<b>📊 Cᴜʀʀᴇɴᴛ Sᴛᴀᴛᴜꜱ :</b> <code>{}</code>
+<b>🔥 Pᴇʀᴄᴇɴᴛᴀɢᴇ :</b> <code>{}</code> %
 
-    async def is_bot_exist(self, user_id, bot_id):
-       bot = await self.bot.find_one({'user_id': user_id, 'id': bot_id})
-       return bool(bot)
+{}
+"""
 
-    async def in_channel(self, user_id: int, chat_id: int) -> bool:
-       channel = await self.chl.find_one({"user_id": int(user_id), "chat_id": int(chat_id)})
-       return bool(channel)
+  DUPLICATE_TEXT = """<b><u>UɴᴇQᴜɪꜰʏ Sᴛᴀᴛᴜꜱ</u></b>
 
-    async def add_channel(self, user_id: int, chat_id: int, title, username):
-       # Check if the channel already exists for this user
-       if await self.in_channel(user_id, chat_id):
-           return False
-       # Add the channel if it does not exist
-       return await self.chl.insert_one({"user_id": user_id, "chat_id": chat_id, "title": title, "username": username})
+<b>🎯 Total In Range:</b> <code>{total}</code>
+<b>🕵 Mᴇssᴀɢᴇs Sᴄᴀɴɴᴇᴅ :</b> <code>{}</code>
+<b>👥 Dᴜʙʟɪᴄᴀᴛᴇ Dᴇʟᴇᴛᴇᴅ :</b> <code>{}</code>
 
-    async def remove_channel(self, user_id: int, chat_id: int):
-       channel = await self.in_channel(user_id, chat_id )
-       if not channel:
-         return False
-       return await self.chl.delete_many({"user_id": int(user_id), "chat_id": int(chat_id)})
+{}
+"""
+  DOUBLE_CHECK = """<b><u>Dᴏᴜʙʟᴇ Cʜᴇᴄᴋɪɴɢ</u></b>
+  
+Bᴇꜰᴏʀ Fᴏʀᴡᴀʀᴅɪɴɢ Tʜᴇ Mᴇꜱꜱᴀɢᴇꜱ Cʟɪᴄᴋ Tʜᴇ Yᴇꜱ Bᴜᴛᴛᴏɴ Oɴʟʏ Aꜰᴛᴇʀ Cʜᴇᴄᴋɪɴɢ Tʜᴇ Fᴏʟʟᴏᴡɪɴɢ
 
-    async def get_channel_details(self, user_id: int, chat_id: int):
-       return await self.chl.find_one({"user_id": int(user_id), "chat_id": int(chat_id)})
+<b>★ Yᴏᴜʀ Bᴏᴛ :</b> [{botname}](t.me/{botuname})
+<b>★ Fʀᴏᴍ Cʜᴀɴɴᴇʟ :</b> <code>{from_chat}</code>
+<b>★ Tᴏ Cʜᴀɴɴᴇʟ :</b> <code>{to_chat}</code>
+<b>★ Mᴇssᴀɢᴇ Rᴀɴɢᴇ :</b> <code>{message_range}</code>
 
-    async def get_user_channels(self, user_id: int):
-       channels = self.chl.find({"user_id": int(user_id)})
-       return [channel async for channel in channels]
+<i>° [{botname}](t.me/{botuname}) Mᴜꜱᴛ Bᴇ Aᴅᴍɪɴ Iɴ <b>Tᴀʀɢᴇᴛ Cʜᴀᴛ</b></i> (<code>{to_chat}</code>)
+<i>° Iꜰ Tʜᴇ <b>Sᴏᴜʀᴄᴇ Cʜᴀᴛ</b> Iꜱ Pʀɪᴠᴀᴛᴇ Yᴏᴜʀ Userbot Mᴜꜱᴛ Bᴇ Mᴇᴍʙᴇʀ Or Yᴏᴜʀ Bᴏᴛ Mᴜꜱᴛ Bᴇ Aᴅᴍɪɴ Iɴ Tʜᴇʀᴇ Aʟꜱᴏ</i>
 
-    async def get_filters(self, user_id):
-       filters = []
-       filter = (await self.get_configs(user_id))['filters']
-       for k, v in filter.items():
-          if v == False:
-            filters.append(str(k))
-       return filters
+<b>Iꜰ Tʜᴇ Aʙᴏᴠᴇ Iꜱ Cʜᴇᴄᴋᴇᴅ Tʜᴇɴ Tʜᴇ Yᴇꜱ Bᴜᴛᴛᴏɴ Cᴀɴ Bᴇ Cʟɪᴄᴋᴇᴅ</b>"""
+  
+  FORWARDELAY_TXT = """<b><u>Set Forwarding Delay</u></b>
 
-    async def add_frwd(self, user_id):
-       return await self.nfy.insert_one({'user_id': int(user_id)})
+Use this command to set a custom delay (in seconds) between forwarded messages to avoid Telegram's flood limits.
 
-    async def rmve_frwd(self, user_id=0, all=False):
-       data = {} if all else {'user_id': int(user_id)}
-       return await self.nfy.delete_many(data)
+<b>Usage:</b> <code>/forwardelay [delay_in_seconds]</code>
+<b>Example:</b> <code>/forwardelay 0.5</code> (sets a half-second delay)
+<b>Example:</b> <code>/forwardelay 2</code> (sets a two-second delay)
 
-    async def get_all_frwd(self):
-       return self.nfy.find({})
-
-db = Database(DB_URL, DB_NAME)
+The default delay is 1 second."""
