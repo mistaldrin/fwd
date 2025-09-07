@@ -10,7 +10,7 @@ from translation import Translation
 from pyrogram import Client, filters, enums
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from pyrogram.enums import ChatMemberStatus, ParseMode
-from pyrogram.errors import FloodWait, ChannelInvalid, UsernameNotOccupied, UsernameInvalid, PeerIdInvalid
+from pyrogram.errors import FloodWait, ChannelInvalid, UsernameNotOccupied, UsernameInvalid, PeerIdInvalid, UserNotParticipant
 
 SYD = ["https://files.catbox.moe/3lwlbm.png"]
 
@@ -174,50 +174,46 @@ async def source_chat_handler(bot: Client, message: Message):
 async def process_source_chat(bot: Client, message: Message, user_id: int, bot_id: int, to_chat_id: int, source_input: str):
     """Gets chat info and proceeds to the range selection screen."""
     
-    # Clear the user's state
     temp.USER_STATES.pop(user_id, None)
-    
-    last_msg_id = 0
     from_chat_id = None
 
-    # Parse link if provided
     regex = re.compile(r"(https://)?(t\.me/|telegram\.me/|telegram\.dog/)(c/)?(\d+|[a-zA-Z_0-9]+)/?(\d+)?")
-    match = regex.match(source_input.replace("?single", ""))
+    match = regex.match(str(source_input).replace("?single", ""))
     
     if match:
         from_chat_id = match.group(4)
         if from_chat_id.isnumeric():
             from_chat_id = int("-100" + from_chat_id)
     else:
-        from_chat_id = source_input # Assume it's a username or ID
+        from_chat_id = source_input
 
     try:
+        # CORRECTED LOGIC: Use the selected client for the lookup.
         bot_config = await db.get_bot(user_id, bot_id)
-        async with CLIENT().client(bot_config) as temp_client:
-            chat_info = await temp_client.get_chat(from_chat_id)
+        if not bot_config:
+            return await message.reply("Selected bot/userbot configuration not found.")
+
+        async with CLIENT().client(bot_config) as lookup_client:
+            chat_info = await lookup_client.get_chat(from_chat_id)
             from_title = chat_info.title
             
-            # Get the very last message ID
-            async for last_message in temp_client.get_chat_history(chat_info.id, limit=1):
+            last_msg_id = 0
+            async for last_message in lookup_client.get_chat_history(chat_info.id, limit=1):
                 last_msg_id = last_message.id
                 break
-            
-            # --- Step 4: Show Range Selection ---
-            await start_range_selection(
-                bot=bot,
-                user_id=user_id,
-                chat_id=user_id,
-                from_chat_id=chat_info.id,
-                from_title=from_title,
-                to_chat_id=to_chat_id,
-                last_msg_id=last_msg_id,
-                final_callback_prefix="fwd_final"
-            )
+        
+        await start_range_selection(
+            bot=bot, user_id=user_id, chat_id=user_id,
+            from_chat_id=chat_info.id, from_title=from_title,
+            to_chat_id=to_chat_id, last_msg_id=last_msg_id,
+            final_callback_prefix="fwd_final"
+        )
 
     except (UsernameInvalid, PeerIdInvalid, ChannelInvalid) as e:
-        await message.reply(f"Could not find the source chat: `{e}`.")
+        await message.reply(f"Could not find the source chat: `{e}`. Ensure the selected bot/userbot has access.")
     except Exception as e:
-        await message.reply(f"An error occurred: {e}")
+        await message.reply(f"An error occurred: {e}\n\nThis can happen if you selected a regular bot that is not an admin in the source channel.")
+
 
 # ------------------------------------------------------------------------------------
 # Final confirmation and range selection callbacks
