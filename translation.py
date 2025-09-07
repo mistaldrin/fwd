@@ -15,12 +15,9 @@ Select 'Help' for a list of commands.
 Available commands:
 
 ● /start - Check if alive.
-● /forward [source] - Forward messages. Source can be a link or ID.
-● /unequify - Remove duplicates from a chat.
-● /ubclist - List all userbot chats.
+● /forward - Forward messages from a chat.
 ● /settings - Open the configuration menu.
 ● /resetme - A fresh start. Wipes all settings.
-● /forwardelay - Set a custom forward delay.
 """
   
   HOW_USE_TXT = """<b>֎ How to Use ֎</b>
@@ -28,10 +25,10 @@ Available commands:
 A quick checklist to get started:
 
 1.  <b>Add Bot/Userbot:</b> Add a bot token or userbot session in /settings.
-2.  <b>Add Channels:</b> Add target channels where the bot/userbot is an admin.
+2.  <b>Add Channels:</b> Add target channels where your bot/userbot is an admin.
 3.  <b>Check Permissions:</b>
-    - Userbot must be in private source channels.
-    - Bot/userbot needs admin rights in target channels.
+    - Userbot must be in the source channel if it's private.
+    - Bot/userbot needs admin rights in the target channel.
 
 Ready? Use /forward to begin. (ﾉ´ヮ`)ﾉ*:･ﾟ✧"""
   
@@ -49,66 +46,41 @@ Ready? Use /forward to begin. (ﾉ´ヮ`)ﾉ*:･ﾟ✧"""
 ● <b>Active Forwards:</b> <code>{}</code>
 """
   
-  TO_MSG = "<b>Target Chat?</b>\n\nSelect a target chat from the buttons below.\n\n/cancel - Abort mission."
-  SOURCE_MSG_BOT = "<b>Source Chat?</b>\n\nSend the source channel ID or a link to any message in it.\n\n/cancel - Abort mission."
-  SOURCE_MSG_USERBOT = "<b>Source Chat?</b>\n\nReply with the number or Chat ID of the source channel."
-  
+  TO_MSG = "<b><u>Choose Target Chat</u></b>\n\nChoose your target chat from the given buttons.\n\n/cancel - To cancel this process."
+  FROM_MSG = "<b><u>Set End Point</u></b>\n\nForward the <b>last message</b> you want to include in the range, or send a link to it.\n\n/cancel - To cancel."
+  START_MSG = "<b><u>Set Start Point</u></b>\n\nNow, forward the <b>first message</b> you want to include in the range, or send a link to it.\n\n/cancel - To cancel."
+
   RANGE_SELECTION_TXT = """<b>֎ Message Range ֎</b>
 
-Forward all messages or define a custom range below.
+Your range is set. You can confirm to start forwarding, or use the buttons to make adjustments.
 
 <i>Note: Large channels can take a while. Patience is a virtue.</i>"""
-
-  UNEQUIFY_START_TXT = """<b>֎ Deduplicator ֎</b>
-
-Select the target channel.
-
-Manual input: `/unequify [channel_username]`"""
   
-  CANCEL = "Process cancelled. (o˘◡˘o)"
-  BOT_DETAILS = "<b>֎ Bot Details ֎</b>\n\n● <b>Name:</b> <code>{}</code>\n● <b>ID:</b> <code>{}</code>\n● <b>Username:</b> {}"
-  USER_DETAILS = "<b>֎ Userbot Details ֎</b>\n\n● <b>Name:</b> <code>{}</code>\n● <b>ID:</b> <code>{}</code>\n● <b>Username:</b> {}"  
+  CANCEL = "Process cancelled successfully!"
+  BOT_DETAILS = "<b><u>Bot Details</u></b>\n\n<b>Name:</b> <code>{}</code>\n<b>Bot ID:</b> <code>{}</code>\n<b>Username:</b> @{}"
+  USER_DETAILS = "<b><u>Userbot Details</u></b>\n\n<b>Name:</b> <code>{}</code>\n<b>User ID:</b> <code>{}</code>\n<b>Username:</b> @{}"  
          
-  TEXT = """<b>֎ Forwarding Status ֎</b>
-
-● <b>Fetched:</b> <code>{fetched}</code>
-● <b>Forwarded:</b> <code>{forwarded}</code>
-● <b>Duplicate:</b> <code>{duplicate}</code>
-● <b>Deleted:</b> <code>{deleted}</code>
-● <b>Skipped:</b> <code>{skipped}</code>
-● <b>Filtered:</b> <code>{filtered}</code>
-● <b>Status:</b> <code>{status}</code>
-● <b>Progress:</b> <code>{percentage}%</code>
+  TEXT = """<b><u>Forwarding Status</u></b>
+  
+<b>Fetched:</b> <code>{fetched}</code> of <code>{total}</code>
+<b>Forwarded:</b> <code>{forwarded}</code>
+<b>Duplicate:</b> <code>{duplicate}</code>
+<b>Deleted/Skipped:</b> <code>{deleted}</code>
+<b>Status:</b> <code>{status}</code>
+<b>Progress:</b> <code>{percentage}</code>%
 
 {progress_bar}
 """
 
-  DUPLICATE_TEXT = """<b>֎ Deduplication Status ֎</b>
+  DOUBLE_CHECK = """<b><u>Final Check</u></b>
+  
+Please confirm the final details:
 
-● <b>Total in Range:</b> <code>{total}</code>
-● <b>Messages Scanned:</b> <code>{scanned}</code>
-● <b>Duplicates Deleted:</b> <code>{deleted}</code>
+● <b>Your Bot/Userbot:</b> [{botname}](t.me/{botuname})
+● <b>From Channel:</b> <code>{from_chat}</code>
+● <b>To Channel:</b> <code>{to_chat}</code>
+● <b>Message Range:</b> <code>{message_range}</code>
 
-{progress}
-"""
-  DOUBLE_CHECK = """<b>֎ Final Check ֎</b>
-
-Here's the plan:
-
-● <b>Using:</b> [{botname}](t.me/{botuname})
-● <b>From:</b> <code>{from_chat}</code>
-● <b>To:</b> <code>{to_chat}</code>
-● <b>Range:</b> <code>{message_range}</code>
-
-<i>Ensure [{botname}](t.me/{botuname}) is an admin in the target chat!</i>
+<i>Make sure [{botname}](t.me/{botuname}) is an admin in the <b>Target Channel</b> (<code>{to_chat}</code>).</i>
 
 <b>Proceed?</b>"""
-  
-  FORWARDELAY_TXT = """<b>֎ Forward Delay ֎</b>
-
-Set a custom delay between forwards. Helps avoid API limits.
-
-<b>Usage:</b> `/forwardelay [seconds]`
-<b>Example:</b> `/forwardelay 0.5`
-
-Default is 1 second."""
