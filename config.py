@@ -15,8 +15,6 @@ class Config:
     PORT = os.environ.get("PORT", "8080")
     DB_NAME = os.environ.get("DB_NAME", "cluster0")
     OWNER_ID = [int(id) for id in os.environ.get("OWNER_ID", '').split()]
-    # Add channel for force subscribe
-    FORCE_SUB_CHANNEL = os.environ.get("FORCE_SUB_CHANNEL", "norFederation")
 
 
 class temp(object): 
