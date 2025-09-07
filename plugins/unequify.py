@@ -1,6 +1,7 @@
 import os
 import asyncio
 import io
+import logging
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from pyrogram.enums import ChatMemberStatus
@@ -11,6 +12,8 @@ from .utils import start_range_selection
 from translation import Translation
 from config import temp
 from database import db
+
+logger = logging.getLogger(__name__)
 
 # --- Constants for the interactive menu ---
 OPTION_LABELS = ["Text", "Photos/Videos", "Audio", "Documents", "Stickers"]
@@ -56,9 +59,15 @@ async def unequify_start(bot: Client, message: Message):
 
 @Client.on_callback_query(filters.regex("^uneq_select_userbot_"))
 async def select_userbot_unequify(bot: Client, query: CallbackQuery):
+    user_id = query.from_user.id
     userbot_id = int(query.data.split('_')[-1])
+    temp.UNEQUIFY_USERBOT_ID[user_id] = userbot_id
     await query.message.delete()
-    await unequify_continue(bot, query.message, userbot_id)
+    # Create a dummy message object to pass to the next function
+    dummy_message = query.message
+    dummy_message.command = ["/unequify"] # Ensure command attribute exists
+    await unequify_continue(bot, dummy_message, userbot_id)
+
 
 async def unequify_continue(bot: Client, message: Message, userbot_id: int):
     user_id = message.from_user.id
@@ -116,6 +125,9 @@ async def list_userbot_chats(bot: Client, message: Message, userbot_id: int):
     user_id = message.from_user.id
     userbot_config = await db.get_bot(user_id, userbot_id)
 
+    if not userbot_config or not userbot_config.get('session'):
+        return await message.reply("Could not find userbot configuration. Please try again.")
+
     sts = await message.reply("`Fetching chat list from userbot... This might take a while.`")
 
     chat_list_text = "Userbot Chat List\n\n"
@@ -147,6 +159,7 @@ async def list_userbot_chats(bot: Client, message: Message, userbot_id: int):
         await sts.delete()
 
     except Exception as e:
+        logger.exception("Error in list_userbot_chats")
         await sts.edit(f"❌ **An error occurred while fetching chats.**\n\n`{e}`")
 
 
@@ -339,4 +352,5 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
     except FloodWait as e:
         await status_message.edit_text(f"❌ **Rate Limit Exceeded.** Please wait `{e.value}` seconds.")
     except Exception as e:
+        logger.exception("Error during deduplication")
         await status_message.edit_text(f"❌ **An unexpected error occurred.**\n\n`{e}`")
