@@ -85,31 +85,36 @@ async def choose_target_chat(bot, message, user_id, bot_id):
 async def get_target_chat(bot, query):
     await query.answer()
     user_id = query.from_user.id
-    chat_id_for_reply = query.message.chat.id
     toid = int(query.data.split('_')[2])
     bot_id = int(query.data.split('_')[3])
 
-    # Store the selected bot_id in a user-specific session
     temp.FORWARD_BOT_ID[user_id] = bot_id
-
-    await query.message.delete()
+    
+    prompt_message = query.message
 
     try:
-        ask_message = await bot.send_photo(
-            chat_id=chat_id_for_reply,
-            photo=random.choice(SYD),
+        # Edit the existing message to ask for the source chat
+        await prompt_message.edit_caption(
             caption=Translation.FROM_MSG,
-            quote=True
+            reply_markup=None  # This removes the buttons
         )
-        fromid_msg = await bot.listen(chat_id=chat_id_for_reply, timeout=300)
+        # Wait for the user's response
+        fromid_msg = await bot.listen(chat_id=prompt_message.chat.id, timeout=300)
     except asyncio.TimeoutError:
-        await ask_message.delete()
-        return await bot.send_message(chat_id_for_reply, Translation.CANCEL)
+        await prompt_message.edit_text(Translation.CANCEL)
+        return
+    except Exception as e:
+        print(f"An error occurred in get_target_chat: {e}")
+        await prompt_message.edit_text("An error occurred. Please try again.")
+        return
 
-    await ask_message.delete()
+    # Now that we have the reply, we can delete the prompt message
+    await prompt_message.delete()
 
     if fromid_msg.text and fromid_msg.text.startswith('/'):
-        return await fromid_msg.reply(Translation.CANCEL)
+        await fromid_msg.delete()
+        await bot.send_message(prompt_message.chat.id, Translation.CANCEL)
+        return
 
     last_msg_id = 0
     if fromid_msg.text and not fromid_msg.forward_date:
@@ -126,7 +131,8 @@ async def get_target_chat(bot, query):
         chat_id = fromid_msg.forward_from_chat.username or fromid_msg.forward_from_chat.id
     else:
         await fromid_msg.delete()
-        return await bot.send_message(chat_id_for_reply, "Invalid input. A message link or forwarded message is required.")
+        await bot.send_message(prompt_message.chat.id, "Invalid input. A message link or forwarded message is required.")
+        return
 
     try:
         # Use the selected bot/userbot to get chat info, not the main bot
