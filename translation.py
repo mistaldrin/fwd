@@ -116,5 +116,3 @@ Use this command to set a custom delay (in seconds) between forwarded messages t
 <b>Example:</b> <code>/forwardelay 2</code> (sets a two-second delay)
 
 The default delay is 1 second."""
-
-}
