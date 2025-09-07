@@ -37,16 +37,11 @@ async def settings_query(bot, query):
        buttons = []
        bots = await db.get_bots(user_id)
        for _bot in bots:
-          bot_id = _bot.get('id')
-          # If there's no ID, we can't interact with the bot. Skip it to prevent errors.
-          if not bot_id:
+          # Gracefully handle missing name, ID, or username
+          if not _bot.get('id'):
               continue
-
-          bot_name = _bot.get('name')
-          if not bot_name:
-              username = _bot.get('username')
-              bot_name = f"@{username}" if username else f"Unnamed Bot (ID: {bot_id})"
-          
+          bot_name = _bot.get('name') or _bot.get('username', f"ID: {_bot['id']}")
+          bot_id = _bot.get('id')
           buttons.append([InlineKeyboardButton(bot_name,
                            callback_data=f"settings#editbot_{bot_id}")])
 
@@ -57,7 +52,7 @@ async def settings_query(bot, query):
        buttons.append([InlineKeyboardButton('⇇ Bᴀᴄᴋ',
                         callback_data="settings#main")])
        await query.message.edit_text(
-         "<b><u>Mʏ Bᴏᴛꜱ</u></b>\n\nYᴏᴜ Cᴀɴ Mᴀɴᴀɢᴇ Yᴏᴜʀ Bᴏᴛꜱ Iɴ Hᴇʀᴇ \nAᴅᴅ Tʜɪꜱ Bᴏᴛ Tᴀʀɢᴇᴛ Cʜᴀᴛ ᴀɴᴅ Sᴏᴜʀᴄᴇ Cʜᴀᴛ ✨",
+         "<b><u>Mʏ Bᴏᴛꜱ & UꜱᴇʀBᴏᴛꜱ</u></b>\n\nYᴏᴜ Cᴀɴ Mᴀɴᴀɢᴇ Yᴏᴜʀ Bᴏᴛꜱ & UꜱᴇʀBᴏᴛꜱ Iɴ Hᴇʀᴇ",
          reply_markup=InlineKeyboardMarkup(buttons))
 
     elif type=="addbot":
@@ -125,13 +120,7 @@ async def settings_query(bot, query):
            await text.edit_text('Pʀᴏᴄᴇꜱꜱ Hᴀꜱ Bᴇᴇɴ Cᴀɴᴄᴇʟʟᴇᴅ Aᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ Dᴜᴇ Tᴏ Nᴏ Rᴇꜱᴩᴏɴꜱᴇ!', reply_markup=InlineKeyboardMarkup(buttons))
 
     elif type.startswith("editbot"):
-       try:
-           bot_id_str = type.split('_')[1]
-           bot_id = int(bot_id_str)
-       except (IndexError, ValueError):
-           await query.message.edit_text("Error: Invalid bot ID.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data="settings#bots")]]))
-           return
-
+       bot_id = int(type.split('_')[1])
        _bot = await db.get_bot(user_id, bot_id)
        if not _bot:
            await query.message.edit_text("Bot configuration not found. It might have been removed.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data="settings#bots")]]))
@@ -335,14 +324,14 @@ async def settings_query(bot, query):
           reply_markup=await next_filters_buttons(user_id))
 
     elif type.startswith("updatefilter"):
-       _, key, value = type.split('-')
+       i, key, value = type.split('-')
        if value=="True":
           await update_configs(user_id, key, False)
        else:
           await update_configs(user_id, key, True)
-       if key in ['poll', 'protect']:
-          return await query.edit_message_reply_markup(
-             reply_markup=await next_filters_buttons(user_id))
+       if key in ['poll', 'protect', 'duplicate', 'forward_tag']:
+           await query.edit_message_reply_markup(reply_markup=await filters_buttons(user_id))
+           return
        await query.edit_message_reply_markup(
           reply_markup=await filters_buttons(user_id))
 
@@ -355,22 +344,20 @@ async def settings_query(bot, query):
          reply_markup=size_button(size))
 
     elif type.startswith("update_size"):
-      try:
-          size = int(type.split('_')[1])
-      except (IndexError, ValueError):
-          return await query.answer("Invalid size value.", show_alert=True)
-      
-      if not (0 <= size <= 2000):
-        return await query.answer("Size Limit must be between 0 and 2000 MB.", show_alert=True)
-      
+      size = int(query.data.split('-')[1])
+      # Prevent negative sizes
+      if size < 0:
+          size = 0
+      if size > 2000:
+        return await query.answer("Size Limit Exceeded (Max 2000 MB)", show_alert=True)
       await update_configs(user_id, 'file_size', size)
       i, limit = size_limit((await get_configs(user_id))['size_limit'])
       await query.message.edit_text(
-         f'<b><u>Sɪᴢᴇ Lɪᴍɪᴛ</u></b>\n\nYᴏᴜ Cᴀɴ Sᴇᴛ Fɪʟᴇ Sɪᴢᴇ Lɪᴍɪᴛ Tᴏ Fᴏᴡᴀʀᴅ\n\nSᴛᴀᴛᴜꜱ : Fɪʟᴇꜱ Wɪᴛʜ {limit} `{size} ᴍʙ` Wɪʟʟ Fᴏʀᴡᴀʀᴅ',
+         f'<b><u>Sɪᴢᴇ Lɪᴍɪᴛ</u></b>\n\nYᴏᴜ Fᴏᴡᴀʀᴅ Tᴏ Fᴏᴡᴀʀᴅ\n\nSᴛᴀᴛᴜꜱ : Fɪʟᴇꜱ Wɪᴛʜ {limit} `{size} ᴍʙ` Wɪʟʟ Fᴏʀᴡᴀʀᴅ',
          reply_markup=size_button(int(size)))
 
     elif type.startswith('update_limit'):
-      _, limit, size = type.split('-')
+      i, limit, size = type.split('-')
       limit, sts = size_limit(limit)
       await update_configs(user_id, 'size_limit', limit)
       await query.message.edit_text(
@@ -441,188 +428,4 @@ async def settings_query(bot, query):
 
     elif type == "rmve_all_keyword":
       await update_configs(user_id, 'keywords', None)
-      await query.message.edit_text(text="Successfully Deleted",
-                                     reply_markup=InlineKeyboardMarkup(buttons))
-    elif type.startswith("alert"):
-      alert = type.split('_')[1]
-      await query.answer(alert, show_alert=True)
-
-  except Exception as e:
-      print(f"Error in settings_query: {e}")
-      # Notify the user that an error occurred
-      await query.message.reply_text("An unexpected error occurred. Please try again later.")
-
-
-def main_buttons():
-  buttons = [[
-       InlineKeyboardButton('⚹ Bᴏᴛꜱ',
-                    callback_data=f'settings#bots'),
-       InlineKeyboardButton('Cʜᴀɴɴᴇʟꜱ ⚹',
-                    callback_data=f'settings#channels')
-       ],[
-       InlineKeyboardButton('⚹ Cᴀᴩᴛɪᴏɴ',
-                    callback_data=f'settings#caption'),
-       InlineKeyboardButton('MᴏɴɢᴏDB ⚹',
-                    callback_data=f'settings#database')
-       ],[
-       InlineKeyboardButton('⚹ Fɪʟᴛᴇʀꜱ',
-                    callback_data=f'settings#filters'),
-       InlineKeyboardButton('Bᴜᴛᴛᴏɴ ⚹',
-                    callback_data=f'settings#button')
-       ],[
-       InlineKeyboardButton('⛭ Exᴛʀꜱ Sᴇᴛᴛɪɴɢꜱ ⛭',
-                    callback_data='settings#nextfilters')
-       ],[
-       InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data='back')
-       ]]
-  return InlineKeyboardMarkup(buttons)
-
-def size_limit(limit):
-   if str(limit) == "None":
-      return None, ""
-   elif str(limit) == "True":
-      return True, "more than"
-   else:
-      return False, "less than"
-
-def extract_btn(datas):
-    i = 0
-    btn = []
-    if datas:
-       for data in datas:
-         if i >= 5:
-            i = 0
-         if i == 0:
-            btn.append([InlineKeyboardButton(data, f'settings#alert_{data}')])
-            i += 1
-            continue
-         elif i > 0:
-            btn[-1].append(InlineKeyboardButton(data, f'settings#alert_{data}'))
-            i += 1
-    return btn
-
-def size_button(size):
-  buttons = [[
-       InlineKeyboardButton('+',
-                    callback_data=f'settings#update_limit-True-{size}'),
-       InlineKeyboardButton('=',
-                    callback_data=f'settings#update_limit-None-{size}'),
-       InlineKeyboardButton('-',
-                    callback_data=f'settings#update_limit-False-{size}')
-       ],[
-       InlineKeyboardButton('+1',
-                    callback_data=f'settings#update_size_{size + 1}'),
-       InlineKeyboardButton('-1',
-                    callback_data=f'settings#update_size_{size - 1}')
-       ],[
-       InlineKeyboardButton('+5',
-                    callback_data=f'settings#update_size_{size + 5}'),
-       InlineKeyboardButton('-5',
-                    callback_data=f'settings#update_size_{size - 5}')
-       ],[
-       InlineKeyboardButton('+10',
-                    callback_data=f'settings#update_size_{size + 10}'),
-       InlineKeyboardButton('-10',
-                    callback_data=f'settings#update_size_{size - 10}')
-       ],[
-       InlineKeyboardButton('+50',
-                    callback_data=f'settings#update_size_{size + 50}'),
-       InlineKeyboardButton('-50',
-                    callback_data=f'settings#update_size_{size - 50}')
-       ],[
-       InlineKeyboardButton('+100',
-                    callback_data=f'settings#update_size_{size + 100}'),
-       InlineKeyboardButton('-100',
-                    callback_data=f'settings#update_size_{size - 100}')
-       ],[
-       InlineKeyboardButton('↩ Back',
-                    callback_data="settings#main")
-     ]]
-  return InlineKeyboardMarkup(buttons)
-
-async def filters_buttons(user_id):
-  filter = await get_configs(user_id)
-  filters = filter['filters']
-  buttons = [[
-       InlineKeyboardButton('🏷️ Fᴏʀᴡᴀʀᴅ Tᴀɢ',
-                    callback_data=f'settings#updatefilter-forward_tag-{filter["forward_tag"]}'),
-       InlineKeyboardButton('✅' if filter['forward_tag'] else '❌',
-                    callback_data=f'settings#updatefilter-forward_tag-{filter["forward_tag"]}')
-       ],[
-       InlineKeyboardButton('🖍️ Tᴇxᴛ',
-                    callback_data=f'settings#updatefilter-text-{filters["text"]}'),
-       InlineKeyboardButton('✅' if filters['text'] else '❌',
-                    callback_data=f'settings#updatefilter-text-{filters["text"]}')
-       ],[
-       InlineKeyboardButton('📁 Dᴏᴄᴜᴍᴇɴᴛꜱ',
-                    callback_data=f'settings#updatefilter-document-{filters["document"]}'),
-       InlineKeyboardButton('✅' if filters['document'] else '❌',
-                    callback_data=f'settings#updatefilter-document-{filters["document"]}')
-       ],[
-       InlineKeyboardButton('🎞️ Vɪᴅᴇᴏꜱ',
-                    callback_data=f'settings#updatefilter-video-{filters["video"]}'),
-       InlineKeyboardButton('✅' if filters['video'] else '❌',
-                    callback_data=f'settings#updatefilter-video-{filters["video"]}')
-       ],[
-       InlineKeyboardButton('📷 Pʜᴏᴛᴏꜱ',
-                    callback_data=f'settings#updatefilter-photo-{filters["photo"]}'),
-       InlineKeyboardButton('✅' if filters['photo'] else '❌',
-                    callback_data=f'settings#updatefilter-photo-{filters["photo"]}')
-       ],[
-       InlineKeyboardButton('🎧 Aᴜᴅɪᴏ',
-                    callback_data=f'settings#updatefilter-audio-{filters["audio"]}'),
-       InlineKeyboardButton('✅' if filters['audio'] else '❌',
-                    callback_data=f'settings#updatefilter-audio-{filters["audio"]}')
-       ],[
-       InlineKeyboardButton('🎤 Vᴏɪᴄᴇ',
-                    callback_data=f'settings#updatefilter-voice-{filters["voice"]}'),
-       InlineKeyboardButton('✅' if filters['voice'] else '❌',
-                    callback_data=f'settings#updatefilter-voice-{filters["voice"]}')
-       ],[
-       InlineKeyboardButton('🎭 Aɴɪᴍᴀᴛɪᴏɴ',
-                    callback_data=f'settings#updatefilter-animation-{filters["animation"]}'),
-       InlineKeyboardButton('✅' if filters['animation'] else '❌',
-                    callback_data=f'settings#updatefilter-animation-{filters["animation"]}')
-       ],[
-       InlineKeyboardButton('🃏 Sᴛɪᴄᴋᴇʀꜱ',
-                    callback_data=f'settings#updatefilter-sticker-{filters["sticker"]}'),
-       InlineKeyboardButton('✅' if filters['sticker'] else '❌',
-                    callback_data=f'settings#updatefilter-sticker-{filters["sticker"]}')
-       ],[
-       InlineKeyboardButton('▶️ Sᴋɪᴩ Dᴜᴩʟɪᴄᴀᴛᴇ',
-                    callback_data=f'settings#updatefilter-duplicate-{filter["duplicate"]}'),
-       InlineKeyboardButton('✅' if filter['duplicate'] else '❌',
-                    callback_data=f'settings#updatefilter-duplicate-{filter["duplicate"]}')
-       ],[
-       InlineKeyboardButton('⇇ Bᴀᴄᴋ',
-                    callback_data="settings#main")
-       ]]
-  return InlineKeyboardMarkup(buttons)
-
-async def next_filters_buttons(user_id):
-  filter = await get_configs(user_id)
-  filters = filter['filters']
-  buttons = [[
-       InlineKeyboardButton('📊 Pᴏʟʟ',
-                    callback_data=f'settings#updatefilter-poll-{filters["poll"]}'),
-       InlineKeyboardButton('✅' if filters['poll'] else '❌',
-                    callback_data=f'settings#updatefilter-poll-{filters["poll"]}')
-       ],[
-       InlineKeyboardButton('🔒 Sᴇᴄᴜʀᴇ Mᴇꜱꜱᴀɢᴇ',
-                    callback_data=f'settings#updatefilter-protect-{filter["protect"]}'),
-       InlineKeyboardButton('✅' if filter['protect'] else '❌',
-                    callback_data=f'settings#updatefilter-protect-{filter["protect"]}')
-       ],[
-       InlineKeyboardButton('🛑 Sɪᴢᴇ Lɪᴍɪᴛ',
-                    callback_data='settings#file_size')
-       ],[
-       InlineKeyboardButton('💾 Exᴛᴇɴꜱɪᴏɴ',
-                    callback_data='settings#get_extension')
-       ],[
-       InlineKeyboardButton('📌 Kᴇʏᴡᴏʀᴅꜱ',
-                    callback_data='settings#get_keyword')
-       ],[
-       InlineKeyboardButton('⇇ Bᴀᴄᴋ',
-                    callback_data="settings#main")
-       ]]
-  return InlineKeyboardMarkup(buttons)
+      await query.message.edit_text(text="Successfull
