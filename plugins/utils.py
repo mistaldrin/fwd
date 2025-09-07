@@ -78,7 +78,14 @@ class STS:
        return int(no) / by 
     
     async def get_data(self, user_id):
-        bot = await db.get_bot(user_id)
+        bot_id = temp.FORWARD_BOT_ID.get(user_id)
+        if not bot_id:
+            return None, None, None, None, None, None
+            
+        bot = await db.get_bot(user_id, bot_id)
+        if not bot:
+            return None, None, None, None, None, None
+
         k, filters = self, await db.get_filters(user_id)
         size, configs = None, await db.get_configs(user_id)
         if configs['duplicate']:
