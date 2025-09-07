@@ -1,19 +1,16 @@
 import os
 import asyncio
 import io
-import logging
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from pyrogram.enums import ChatMemberStatus
 from pyrogram.errors import FloodWait, ChannelInvalid, UsernameNotOccupied, UsernameInvalid, PeerIdInvalid, UserAlreadyParticipant
 
-from .test import CLIENT, start_clone_bot
+from .test import CLIENT
 from .utils import start_range_selection
 from translation import Translation
 from config import temp
 from database import db
-
-logger = logging.getLogger(__name__)
 
 # --- Constants for the interactive menu ---
 OPTION_LABELS = ["Text", "Photos/Videos", "Audio", "Documents", "Stickers"]
@@ -59,20 +56,15 @@ async def unequify_start(bot: Client, message: Message):
 
 @Client.on_callback_query(filters.regex("^uneq_select_userbot_"))
 async def select_userbot_unequify(bot: Client, query: CallbackQuery):
-    user_id = query.from_user.id
     userbot_id = int(query.data.split('_')[-1])
-    temp.UNEQUIFY_USERBOT_ID[user_id] = userbot_id
     await query.message.delete()
-    # Create a dummy message object to pass to the next function
-    dummy_message = query.message
-    dummy_message.command = ["/unequify"] # Ensure command attribute exists
-    await unequify_continue(bot, dummy_message, userbot_id)
-
+    await unequify_continue(bot, query.message, userbot_id)
 
 async def unequify_continue(bot: Client, message: Message, userbot_id: int):
     user_id = message.from_user.id
-    temp.UNEQUIFY_USERBOT_ID[user_id] = userbot_id
-    
+    # Use the per-user session dictionary
+    temp.USERBOT_SESSIONS[user_id] = userbot_id
+
     if len(message.command) < 2:
         # Show interactive menu if no target is provided
         buttons = [
@@ -88,8 +80,11 @@ async def unequify_continue(bot: Client, message: Message, userbot_id: int):
     try:
         # We need a client to get chat info. Let's use the main bot client for this initial step.
         chat = await bot.get_chat(target_channel_input)
-        # Using an arbitrary high number for last message id, user will edit it.
-        await start_range_selection(bot, message, from_chat_id=chat.id, from_title=chat.title, to_chat_id=None, last_msg_id=999999, final_callback_prefix="uneq_final")
+        last_msg_id = 0
+        async for last_message in bot.get_chat_history(chat.id, limit=1):
+            last_msg_id = last_message.id
+            break
+        await start_range_selection(bot, message, from_chat_id=chat.id, from_title=chat.title, to_chat_id=None, last_msg_id=last_msg_id, final_callback_prefix="uneq_final")
     except (UsernameInvalid, PeerIdInvalid, ChannelInvalid) as e:
         await message.reply(f"Could not find the chat: `{e}`. Please check the username/ID.")
     except Exception as e:
@@ -125,9 +120,6 @@ async def list_userbot_chats(bot: Client, message: Message, userbot_id: int):
     user_id = message.from_user.id
     userbot_config = await db.get_bot(user_id, userbot_id)
 
-    if not userbot_config or not userbot_config.get('session'):
-        return await message.reply("Could not find userbot configuration. Please try again.")
-
     sts = await message.reply("`Fetching chat list from userbot... This might take a while.`")
 
     chat_list_text = "Userbot Chat List\n\n"
@@ -159,7 +151,6 @@ async def list_userbot_chats(bot: Client, message: Message, userbot_id: int):
         await sts.delete()
 
     except Exception as e:
-        logger.exception("Error in list_userbot_chats")
         await sts.edit(f"❌ **An error occurred while fetching chats.**\n\n`{e}`")
 
 
@@ -175,7 +166,7 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
             target = ask_msg.text
             await query.message.delete()
             # Re-call the main function with the provided target
-            msg_copy = query.message.copy()
+            msg_copy = query.message
             msg_copy.from_user = query.from_user # Important for context
             msg_copy.text = f"/unequify {target}"
             msg_copy.command = ["unequify", target]
@@ -184,9 +175,10 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
             await query.message.edit_text("Cancelled.")
 
     elif data == "select_from_userbot":
-        userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
+        # Get the userbot_id from the user-specific session
+        userbot_id = temp.USERBOT_SESSIONS.get(user_id)
         if not userbot_id:
-            return await query.message.edit("Userbot selection lost. Please start over.")
+            return await query.message.edit("Error: Could not determine which userbot to use. Please start over.")
 
         userbot_config = await db.get_bot(user_id, userbot_id)
         if not userbot_config or not userbot_config.get('session'):
@@ -216,8 +208,12 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
                     return await query.message.reply_text("Invalid selection. Please start over.")
 
                 await query.message.delete()
+                last_msg_id = 0
+                async for last_message in userbot.get_chat_history(selected_chat.id, limit=1):
+                    last_msg_id = last_message.id
+                    break
                 # Start range selection for the chosen chat
-                await start_range_selection(bot, query, from_chat_id=selected_chat.id, from_title=selected_chat.title, to_chat_id=None, last_msg_id=999999, final_callback_prefix="uneq_final")
+                await start_range_selection(bot, query, from_chat_id=selected_chat.id, from_title=selected_chat.title, to_chat_id=None, last_msg_id=last_msg_id, final_callback_prefix="uneq_final")
 
             except asyncio.TimeoutError:
                 await query.message.reply_text("Selection timed out.")
@@ -241,7 +237,7 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
         state_list[index] = '1' if state_list[index] == '0' else '0'
         new__state = "".join(state_list)
 
-        new_keyboard = create_selection_keyboard(new_state, session_id)
+        new_keyboard = create_selection_keyboard(new__state, session_id)
         await query.message.edit_reply_markup(new_keyboard)
         await query.answer()
 
@@ -259,10 +255,11 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
     if not range_session:
         return await status_message.edit_text("Error: Session expired or invalid.")
 
-    userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
+    # Get userbot_id from the user-specific session
+    userbot_id = temp.USERBOT_SESSIONS.pop(user_id, None)
     if not userbot_id:
-        return await status_message.edit_text("Error: Userbot selection lost. Please start over.")
-    
+        return await status_message.edit_text("Error: Could not determine which userbot to use. Please start over.")
+
     userbot_config = await db.get_bot(user_id, userbot_id)
     if not userbot_config or not userbot_config.get('session'):
         return await status_message.edit_text("Error: Userbot not found.")
@@ -331,7 +328,7 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
                     await userbot.delete_messages(chat_id=chat.id, message_ids=duplicates_to_delete)
                     total_deleted += len(duplicates_to_delete)
                     duplicates_to_delete.clear()
-                    progress_text = Translation.DUPLICATE_TEXT.format(total_in_range, total_scanned, total_deleted, "...")
+                    progress_text = Translation.DUPLICATE_TEXT.format(total=total_in_range, scanned=total_scanned, deleted=total_deleted, progress="...")
                     try:
                         await status_message.edit_text(progress_text)
                     except FloodWait:
@@ -352,5 +349,4 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
     except FloodWait as e:
         await status_message.edit_text(f"❌ **Rate Limit Exceeded.** Please wait `{e.value}` seconds.")
     except Exception as e:
-        logger.exception("Error during deduplication")
         await status_message.edit_text(f"❌ **An unexpected error occurred.**\n\n`{e}`")
