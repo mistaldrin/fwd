@@ -6,7 +6,7 @@ import asyncio
 import logging
 from .utils import STS
 from database import db 
-from .test import CLIENT , start_clone_bot
+from .test import CLIENT
 from config import Config, temp
 from translation import Translation
 from pyrogram import Client, filters 
@@ -30,7 +30,7 @@ async def process_messages_in_batches(client, from_chat, message_ids_generator, 
     pling = 0
     
     async for message in message_ids_generator:
-        if await is_cancelled(client, user, m, sts):
+        if await is_cancelled(user, m, sts): # Removed client from call
             return "cancelled"
         
         if pling % 20 == 0: 
@@ -71,88 +71,93 @@ async def pub_(bot, message):
     user = message.from_user.id
     temp.CANCEL[user] = False
     frwd_id = message.data.split("_")[2]
-    if temp.lock.get(user) and str(temp.lock.get(user))=="True":
-      return await message.answer("Pʟᴇᴀꜱᴇ Wᴀɪᴛ Uɴᴛɪʟ Pʀᴇᴠɪᴏᴜꜱ Tᴀꜱᴋ Cᴏᴍᴩʟᴇᴛᴇ !", show_alert=True)
+    
+    if temp.lock.get(user):
+        return await message.answer("Pʟᴇᴀꜱᴇ Wᴀɪᴛ Uɴᴛɪʟ Pʀᴇᴠɪᴏᴜꜱ Tᴀꜱᴋ Cᴏᴍᴩʟᴇᴛᴇ !", show_alert=True)
+    
     sts = STS(frwd_id)
     if not sts.verify():
-      await message.answer("Your Are Clicking On My Old Button", show_alert=True)
-      return await message.message.delete()
+        await message.answer("Your Are Clicking On My Old Button", show_alert=True)
+        return await message.message.delete()
+    
     i = sts.get(full=True)
     if i.TO in temp.IS_FRWD_CHAT:
-      return await message.answer("In Target Chat A Task Is Progressing. Please Wait Until Task Complete", show_alert=True)
+        return await message.answer("In Target Chat A Task Is Progressing. Please Wait Until Task Complete", show_alert=True)
+    
     m = await msg_edit(message.message, "Verifying Your Data's, Please Wait.")
+    
     _bot, caption, forward_tag, data, protect, button = await sts.get_data(user)
     if not _bot:
-      return await msg_edit(m, "You Didn't Added Any Bot. Please Add A Bot Uꜱɪɴɢ /settings !", wait=True)
-    try:
-      client = await start_clone_bot(CLIENT.client(_bot))
-    except Exception as e:  
-      return await m.edit(f'Failed to start client: {e}')
-    await msg_edit(m, "Processing...")
-    try: 
-       chat = await client.get_chat(i.FROM)
-    except (PrivateChat, ChannelPrivate, ChannelInvalid, PeerIdInvalid, UsernameInvalid) as e:
-       await stop(client, user)
-       return await msg_edit(m, f"Source chat may be private or invalid. Error: {e}", retry_btn(frwd_id), True)
-    try:
-       k = await client.send_message(i.TO, "Tᴇꜱᴛɪɴɢ......")
-       await k.delete()
-    except Exception as e:
-       await stop(client, user)
-       return await msg_edit(m, f"Please Make Your Bot Admin In Target Channel With Full Permissions. Error: {e}", retry_btn(frwd_id), True)
+        return await msg_edit(m, "You Didn't Add Any Bot Or Userbot. Please Add One Uꜱɪɴɢ /settings !", wait=True)
     
-    temp.forwardings += 1
-    await db.add_frwd(user)
-    await send(client, user, "Fᴏʀᴡᴀʀᴅɪɴɢ Sᴛᴀʀᴛᴇᴅ 🗝️")
-    sts.add(time=True)
-    forward_delay = data.get('forward_delay', 1.0)
-    await msg_edit(m, "Pʀᴏᴄᴄᴇꜱꜱɪɴɢ...") 
-    temp.IS_FRWD_CHAT.append(i.TO)
-    temp.lock[user] = locked = True
-    if locked:
-        try:
-            await edit(m, 'Pʀᴏɢʀᴇꜱꜱꜱɪɴɢ', 10, sts)
+    temp.lock[user] = True
+    
+    try:
+        # Use async with for robust client session management
+        async with CLIENT.client(_bot) as client:
+            await msg_edit(m, "Processing...")
+            try: 
+                await client.get_chat(i.FROM)
+            except (PrivateChat, ChannelPrivate, ChannelInvalid, PeerIdInvalid, UsernameInvalid) as e:
+                return await msg_edit(m, f"Source chat may be private or invalid. Error: {e}", retry_btn(frwd_id), True)
             
-            # Decide fetching strategy based on whether a custom range was set
-            if i.start_id is None: # Forward All
-                message_generator = client.get_chat_history(i.FROM)
-            else: # Forward Custom Range
-                start_id = min(i.start_id, i.end_id)
-                end_id = max(i.start_id, i.end_id)
+            try:
+                k = await client.send_message(i.TO, "Tᴇꜱᴛɪɴɢ......")
+                await k.delete()
+            except Exception as e:
+                return await msg_edit(m, f"Please Make Your Bot/Userbot Admin In Target Channel With Full Permissions. Error: {e}", retry_btn(frwd_id), True)
+            
+            temp.forwardings += 1
+            await db.add_frwd(user)
+            await send(client, user, "Fᴏʀᴡᴀʀᴅɪɴɢ Sᴛᴀʀᴛᴇᴅ 🗝️")
+            sts.add(time=True)
+            forward_delay = data.get('forward_delay', 1.0)
+            await msg_edit(m, "Pʀᴏᴄᴄᴇꜱꜱɪɴɢ...") 
+            temp.IS_FRWD_CHAT.append(i.TO)
+
+            # Main forwarding logic within a try block to catch runtime errors
+            try:
+                await edit(m, 'Pʀᴏɢʀᴇꜱꜱꜱɪɴɢ', 10, sts)
                 
-                # Generator for message IDs to avoid storing large lists in memory
-                message_id_generator = range(start_id, end_id + 1)
-                
-                async def message_fetcher_generator():
-                    batch = []
-                    for msg_id in message_id_generator:
-                        batch.append(msg_id)
-                        if len(batch) == 100:
-                            messages_chunk = await client.get_messages(i.FROM, batch)
+                if i.start_id is None: # Forward All
+                    message_generator = client.get_chat_history(i.FROM)
+                else: # Forward Custom Range
+                    start_id, end_id = min(i.start_id, i.end_id), max(i.start_id, i.end_id)
+                    
+                    async def message_fetcher_generator():
+                        batch = list(range(start_id, end_id + 1))
+                        for i in range(0, len(batch), 100):
+                            chunk = batch[i:i+100]
+                            messages_chunk = await client.get_messages(i.FROM, chunk)
                             for msg in messages_chunk:
                                 yield msg
-                            batch = []
-                    if batch:
-                        messages_chunk = await client.get_messages(i.FROM, batch)
-                        for msg in messages_chunk:
-                            yield msg
+                    
+                    message_generator = message_fetcher_generator()
+
+                result = await process_messages_in_batches(client, i.FROM, message_generator, user, m, sts, forward_tag, caption, button, protect, forward_delay)
                 
-                message_generator = message_fetcher_generator()
+                if result == "cancelled":
+                    return # Cleanup is handled in finally block
 
-            result = await process_messages_in_batches(client, i.FROM, message_generator, user, m, sts, forward_tag, caption, button, protect, forward_delay)
-            if result == "cancelled":
-                return # Stop further execution
+            except Exception as e:
+                logger.error(f"Forwarding failed: {e}", exc_info=True)
+                await msg_edit(m, f'<b>Error :</b>\n<code>{e}</code>', wait=True)
+            
+            # This runs on successful completion
+            await send(client, user, "Fᴏʀᴡᴀʀᴅɪɴɢ Cᴏᴍᴩʟᴇᴛᴇᴅ 😇")
+            await edit(m, 'Completed', "completed", sts) 
 
-        except Exception as e:
-            logger.error(f"Forwarding failed: {e}", exc_info=True)
-            await msg_edit(m, f'<b>Error :</b>\n<code>{e}</code>', wait=True)
+    except Exception as e:
+        logger.error(f"Failed to start or use client: {e}", exc_info=True)
+        await m.edit(f'Failed to start client: {e}')
+    finally:
+        # This cleanup logic runs whether the process succeeds, fails, or is cancelled
+        if i.TO in temp.IS_FRWD_CHAT:
             temp.IS_FRWD_CHAT.remove(i.TO)
-            return await stop(client, user)
-        
-        temp.IS_FRWD_CHAT.remove(i.TO)
-        await send(client, user, "Fᴏʀᴡᴀʀᴅɪɴɢ Cᴏᴍᴩʟᴇᴛᴇᴅ 😇")
-        await edit(m, 'Completed', "completed", sts) 
-        await stop(client, user)
+        await db.rmve_frwd(user)
+        if temp.forwardings > 0:
+            temp.forwardings -= 1
+        temp.lock[user] = False
             
 async def copy(bot, msg, m, sts):
    try:                                  
@@ -241,24 +246,14 @@ async def edit(msg, title, status, sts):
       button.append([InlineKeyboardButton('✖️ Cᴀɴᴄᴇʟ ✖️', 'terminate_frwd')])
    await msg_edit(msg, text, InlineKeyboardMarkup(button))
    
-async def is_cancelled(client, user, msg, sts):
+async def is_cancelled(user, msg, sts):
    if temp.CANCEL.get(user)==True:
-      temp.IS_FRWD_CHAT.remove(sts.TO)
       await edit(msg, "Cancelled", "completed", sts)
-      await send(client, user, "❌ Forwarding Process Cancelled")
-      await stop(client, user)
+      # We send the message using the main bot client, not the temporary one
+      await bot.send_message(user, "❌ Forwarding Process Cancelled")
       return True 
    return False 
 
-async def stop(client, user):
-   try:
-     await client.stop()
-   except:
-     pass 
-   await db.rmve_frwd(user)
-   temp.forwardings -= 1
-   temp.lock[user] = False 
-    
 async def send(bot, user, text):
    try:
       await bot.send_message(user, text=text)
