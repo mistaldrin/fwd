@@ -210,6 +210,3 @@ class Database:
 
     async def get_all_frwd(self):
        return self.nfy.find({})
-
-# We no longer instantiate the database directly here.
-# It will be created by the initialize_database() function.
