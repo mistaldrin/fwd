@@ -13,8 +13,8 @@ from .test import update_configs
 SYD = ["https://files.catbox.moe/mq4f9j.jpg", "https://files.catbox.moe/mq4f9j.jpg"]
 
 main_buttons = [[
-        InlineKeyboardButton('⊛ Hᴇʟᴩ ⊛', callback_data='help'),
-        InlineKeyboardButton('✧ Aʙᴏᴜᴛ ✧', callback_data='about')
+        InlineKeyboardButton('Help', callback_data='help'),
+        InlineKeyboardButton('About', callback_data='about')
 ]]
 
 
@@ -71,11 +71,11 @@ async def confirm_reset_callback(bot, query):
 @Client.on_message(filters.private & filters.command(['restart', "r"]) & filters.user(Config.OWNER_ID))
 async def restart(client, message):
     msg = await message.reply_text(
-        text="<i>Trying To Restarting.....</i>",
+        text="<i>Restarting...</i>",
         quote=True
     )
-    await asyncio.sleep(5)
-    await msg.edit("<i>Successfully Restarted</i>")
+    await asyncio.sleep(2)
+    await msg.edit("<i>Successfully restarted.</i>")
     os.execl(sys.executable, sys.executable, *sys.argv)
     
 @Client.on_message(filters.command("start") & filters.chat(-1002687879857))
@@ -90,12 +90,12 @@ async def helpcb(bot, query):
         text=Translation.HELP_TXT,
         reply_markup=InlineKeyboardMarkup(
             [[
-            InlineKeyboardButton('∿ Hᴏᴡ To Uꜱᴇ Mᴇ ∿', callback_data='how_to_use')
+            InlineKeyboardButton('How to Use', callback_data='how_to_use')
             ],[
-            InlineKeyboardButton('⛭ SᴇᴛᴛɪɴGS ⛭', callback_data='settings#main'),
-            InlineKeyboardButton('∗ SᴛᴀᴛS ∗', callback_data='status')
+            InlineKeyboardButton('Settings', callback_data='settings#main'),
+            InlineKeyboardButton('Stats', callback_data='status')
             ],[
-            InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data='back')
+            InlineKeyboardButton('« Back', callback_data='back')
             ]]
         ))
 
@@ -117,7 +117,7 @@ async def forward_delay(client, message):
             return await message.reply_text("The delay must be a positive number.")
         
         await update_configs(user_id, 'forward_delay', delay)
-        await message.reply_text(f"Forwarding delay set to {delay} seconds.")
+        await message.reply_text(f"Forwarding delay set to `{delay}` seconds.")
     except ValueError:
         await message.reply_text("Invalid input. Please provide a number.")
 
@@ -126,7 +126,7 @@ async def forward_delay(client, message):
 async def how_to_use(bot, query):
     await query.message.edit_text(
         text=Translation.HOW_USE_TXT,
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data='help')]]),
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('« Back', callback_data='help')]]),
         disable_web_page_preview=True
     )
 
@@ -146,7 +146,7 @@ async def back(bot, query):
 async def about(bot, query):
     await query.message.edit_text(
         text=Translation.ABOUT_TXT.format(bot.me.mention),
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data='back')]]),
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('« Back', callback_data='back')]]),
         disable_web_page_preview=True,
         parse_mode=enums.ParseMode.HTML,
     )
@@ -158,7 +158,7 @@ async def status(bot, query):
     users_count, bots_count = await db.total_users_bots_count()
     await query.message.edit_text(
         text=Translation.STATUS_TXT.format(users_count, bots_count, temp.forwardings),
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data='help')]]),
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('« Back', callback_data='help')]]),
         parse_mode=enums.ParseMode.HTML,
         disable_web_page_preview=True,
     )
