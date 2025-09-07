@@ -108,7 +108,16 @@ async def unequify_continue(bot: Client, message: Message, user_id: int, userbot
             async for last_message in temp_client.get_chat_history(chat.id, limit=1):
                 last_msg_id = last_message.id
                 break
-            await start_range_selection(bot, message, from_chat_id=chat.id, from_title=chat.title, to_chat_id=None, last_msg_id=last_msg_id, final_callback_prefix="uneq_final")
+            await start_range_selection(
+                bot=bot,
+                user_id=message.from_user.id,
+                chat_id=message.chat.id,
+                from_chat_id=chat.id,
+                from_title=chat.title,
+                to_chat_id=None,
+                last_msg_id=last_msg_id,
+                final_callback_prefix="uneq_final"
+            )
 
     except (UsernameInvalid, PeerIdInvalid, ChannelInvalid) as e:
         await message.reply(f"Could not find the chat: `{e}`.")
@@ -253,7 +262,16 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
                     last_msg_id = last_message.id
                     break
                 # Start range selection for the chosen chat
-                await start_range_selection(bot, query, from_chat_id=selected_chat.id, from_title=selected_chat.title, to_chat_id=None, last_msg_id=last_msg_id, final_callback_prefix="uneq_final")
+                await start_range_selection(
+                    bot=bot,
+                    user_id=query.from_user.id,
+                    chat_id=query.message.chat.id,
+                    from_chat_id=selected_chat.id,
+                    from_title=selected_chat.title,
+                    to_chat_id=None,
+                    last_msg_id=last_msg_id,
+                    final_callback_prefix="uneq_final"
+                )
 
             except asyncio.TimeoutError:
                 await status_msg.reply_text("Selection timed out.")
