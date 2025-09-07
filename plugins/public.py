@@ -70,7 +70,7 @@ async def get_target_chat(bot, query):
     bot_id = int(query.data.split('_')[3])
 
     # Store the selected bot_id in a user-specific session
-    temp.FORWARD_SESSIONS[user_id] = bot_id
+    temp.FORWARD_BOT_ID[user_id] = bot_id
 
     await query.message.delete()
 
@@ -123,7 +123,7 @@ async def show_fwd_confirmation(bot, session_id, forward_all=False):
 
     user_id = session['user_id']
     # Retrieve bot_id from the user-specific session
-    bot_id = temp.FORWARD_SESSIONS.get(user_id)
+    bot_id = temp.FORWARD_BOT_ID.get(user_id)
     if not bot_id:
         return await bot.send_message(chat_id=session['chat_id'], text="Error: Could not determine which bot to use. Please start over.")
 
@@ -179,7 +179,7 @@ async def show_fwd_confirmation(bot, session_id, forward_all=False):
     )
     temp.RANGE_SESSIONS.pop(session_id, None)
     # Clean up the session data
-    temp.FORWARD_SESSIONS.pop(user_id, None)
+    temp.FORWARD_BOT_ID.pop(user_id, None)
 
 # --- Generic Range Selection Callbacks ---
 
@@ -254,8 +254,8 @@ async def cancel_range_selection(bot, query):
         return await query.answer("This is not for you!", show_alert=True)
 
     # Clean up any related session data
-    temp.FORWARD_SESSIONS.pop(query.from_user.id, None)
-    temp.USERBOT_SESSIONS.pop(query.from_user.id, None)
+    temp.FORWARD_BOT_ID.pop(query.from_user.id, None)
+    temp.UNEQUIFY_USERBOT_ID.pop(query.from_user.id, None)
     temp.RANGE_SESSIONS.pop(session_id, None)
     
     await query.message.edit_text("Operation cancelled.")
