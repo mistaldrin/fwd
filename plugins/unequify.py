@@ -52,16 +52,16 @@ async def unequify_start(bot: Client, message: Message):
         await message.reply_text("<b><u>Select a Userbot</u></b>\n\nChoose the userbot you want to use for deduplication.", reply_markup=InlineKeyboardMarkup(buttons))
         return
     
-    await unequify_continue(bot, message, userbots[0]['id'])
+    await unequify_continue(bot, message, user_id, userbots[0]['id'])
 
 @Client.on_callback_query(filters.regex("^uneq_select_userbot_"))
 async def select_userbot_unequify(bot: Client, query: CallbackQuery):
     userbot_id = int(query.data.split('_')[-1])
+    user_id = query.from_user.id
     await query.message.delete()
-    await unequify_continue(bot, query.message, userbot_id)
+    await unequify_continue(bot, query.message, user_id, userbot_id)
 
-async def unequify_continue(bot: Client, message: Message, userbot_id: int):
-    user_id = message.from_user.id
+async def unequify_continue(bot: Client, message: Message, user_id: int, userbot_id: int):
     # Use the per-user session dictionary
     temp.UNEQUIFY_USERBOT_ID[user_id] = userbot_id
 
@@ -114,16 +114,16 @@ async def get_userbot_chat_list(bot: Client, message: Message):
         await message.reply_text("<b><u>Select a Userbot</u></b>\n\nChoose the userbot whose chat list you want to see.", reply_markup=InlineKeyboardMarkup(buttons))
         return
         
-    await list_userbot_chats(bot, message, userbots[0]['id'])
+    await list_userbot_chats(bot, message, user_id, userbots[0]['id'])
 
 @Client.on_callback_query(filters.regex("^ubclist_select_"))
 async def select_userbot_ubclist(bot: Client, query: CallbackQuery):
     userbot_id = int(query.data.split('_')[-1])
+    user_id = query.from_user.id
     await query.message.delete()
-    await list_userbot_chats(bot, query.message, userbot_id)
+    await list_userbot_chats(bot, query.message, user_id, userbot_id)
 
-async def list_userbot_chats(bot: Client, message: Message, userbot_id: int):
-    user_id = message.from_user.id
+async def list_userbot_chats(bot: Client, message: Message, user_id: int, userbot_id: int):
     userbot_config = await db.get_bot(user_id, userbot_id)
 
     sts = await message.reply("`Fetching chat list from userbot... This might take a while.`")
