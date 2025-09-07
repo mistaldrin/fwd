@@ -20,394 +20,403 @@ async def settings(client, message):
 
 @Client.on_callback_query(filters.regex(r'^settings'))
 async def settings_query(bot, query):
+  # Answer the callback query immediately to prevent the button from appearing unresponsive
   await query.answer()
   user_id = query.from_user.id
-  i, type = query.data.split("#")
-  buttons = [[InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data="settings#main")]]
   
-  if type=="main":
-     await query.message.edit_text(
-       "<b>Cʜᴀɴɢᴇ Yᴏᴜʀ Sᴇᴛᴛɪɴɢꜱ Aꜱ Pᴇʀ Yᴏᴜʀ Nᴇᴇᴅꜱ! ❄️</b>",
-       reply_markup=main_buttons())
-       
-  elif type=="bots":
-     buttons = [] 
-     _bot = await db.get_bot(user_id)
-     if _bot is not None:
-        buttons.append([InlineKeyboardButton(_bot['name'],
-                         callback_data=f"settings#editbot")])
-     else:
-        buttons.append([InlineKeyboardButton('⨁ Aᴅᴅ Bᴏᴛ ⨁', 
-                         callback_data="settings#addbot")])
-        buttons.append([InlineKeyboardButton('⨁ Aᴅᴅ Uꜱᴇʀ Bᴏᴛ ⨁', 
-                         callback_data="settings#adduserbot")])
-     buttons.append([InlineKeyboardButton('⇇ Bᴀᴄᴋ', 
-                      callback_data="settings#main")])
-     await query.message.edit_text(
-       "<b><u>Mʏ Bᴏᴛꜱ</u></b>\n\nYᴏᴜ Cᴀɴ Mᴀɴᴀɢᴇ Yᴏᴜʀ Bᴏᴛꜱ Iɴ Hᴇʀᴇ \nAᴅᴅ Tʜɪꜱ Bᴏᴛ Tᴀʀɢᴇᴛ Cʜᴀᴛ ᴀɴᴅ Sᴏᴜʀᴄᴇ Cʜᴀᴛ ✨",
-       reply_markup=InlineKeyboardMarkup(buttons))
-  
-  elif type=="addbot":
-     await query.message.delete()
-     add_bot_status = await CLIENT.add_bot(bot, query)
-     if add_bot_status != True: return
-     await query.message.reply_text(
-        "<b>Bᴏᴛ Tᴏᴋᴇɴ Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Aᴅᴅᴇᴅ Tᴏ Dᴀᴛᴀʙᴀꜱᴇ ✓</b>",
-        reply_markup=InlineKeyboardMarkup(buttons))
-  
-  elif type=="adduserbot":
-     await query.message.delete()
-     user = await CLIENT.add_session(bot, query)
-     if user != True: return
-     await query.message.reply_text(
-        "<b>Sᴇꜱꜱɪᴏɴ Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Aᴅᴅᴇᴅ Tᴏ Dᴀᴛᴀʙᴀꜱᴇ ✓</b>",
-        reply_markup=InlineKeyboardMarkup(buttons))
-      
-  elif type=="channels":
-     buttons = []
-     channels = await db.get_user_channels(user_id)
-     for channel in channels:
-        buttons.append([InlineKeyboardButton(f"⁕ {channel['title']}",
-                         callback_data=f"settings#editchannels_{channel['chat_id']}")])
-     buttons.append([InlineKeyboardButton('⨁ Aᴅᴅ Cʜᴀɴɴᴇʟ ⨁', 
-                      callback_data="settings#addchannel")])
-     buttons.append([InlineKeyboardButton('⇇ Bᴀᴄᴋ', 
-                      callback_data="settings#main")])
-     await query.message.edit_text( 
-       "<b><u>Mʏ Cʜᴀɴɴᴇʟꜱ</u></b>\n\nYᴏᴜ Cᴀɴ Mᴀɴᴀɢᴇ Yᴏᴜʀ Tᴀʀɢᴇᴛ Cʜᴀᴛꜱ Iɴ Hᴇʀᴇ!",
-       reply_markup=InlineKeyboardMarkup(buttons))
-   
-  elif type=="addchannel":  
-     await query.message.delete()
-     try:
-         text = await bot.send_message(user_id, "<b><u>Sᴇᴛ Tᴀʀɢᴇᴛ Cʜᴀᴛ</u></b>\n\nFᴏʀᴡᴀʀᴅ A Mᴇꜱꜱᴀɢᴇ Fʀᴏᴍ Yᴏᴜʀ Tᴀʀɢᴇᴛ Cʜᴀᴛ\n/cancel - To Cancel This Process")
-         chat_ids = await bot.listen(chat_id=user_id, timeout=300)
-         if chat_ids.text=="/cancel":
-            await chat_ids.delete()
-            return await text.edit_text(
-                  "Pʀᴏᴄᴇꜱꜱ Cᴀɴᴄᴇʟʟᴇᴅ !",
-                  reply_markup=InlineKeyboardMarkup(buttons))
-         elif not chat_ids.forward_date:
-            await chat_ids.delete()
-            return await text.edit_text("Tʜɪꜱ Iꜱ Nᴏᴛ A Fᴏʀᴡᴀʀᴅᴇᴅ Mᴇꜱꜱᴀɢᴇ!")
-         else:
-            chat_id = chat_ids.forward_from_chat.id
-            title = chat_ids.forward_from_chat.title
-            username = chat_ids.forward_from_chat.username
-            username = "@" + username if username else "private"
-            
-         # Check for duplicate channel before adding
-         if await db.in_channel(user_id, chat_id):
-             await chat_ids.delete()
-             await text.edit_text(
-                 "Tʜɪꜱ Cʜᴀɴɴᴇʟ Iꜱ Aʟʀᴇᴀᴅʏ Aᴅᴅᴇᴅ!",
-                 reply_markup=InlineKeyboardMarkup(buttons))
-         else:
-             await db.add_channel(user_id, chat_id, title, username)
-             await chat_ids.delete()
-             await text.edit_text(
-                 "Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Uᴩᴅᴀᴛᴇᴅ ✓",
-                 reply_markup=InlineKeyboardMarkup(buttons))
-     except asyncio.exceptions.TimeoutError:
-         await text.edit_text('Pʀᴏᴄᴇꜱꜱ Hᴀꜱ Bᴇᴇɴ Cᴀɴᴄᴇʟʟᴇᴅ Aᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ Dᴜᴇ Tᴏ Nᴏ Rᴇꜱᴩᴏɴꜱᴇ!', reply_markup=InlineKeyboardMarkup(buttons))
-  
-  elif type=="editbot": 
-     _bot = await db.get_bot(user_id)
-     TEXT = Translation.BOT_DETAILS if _bot['is_bot'] else Translation.USER_DETAILS
-     buttons = [[InlineKeyboardButton('⛒ Rᴇᴍᴏᴠᴇ ⛒', callback_data=f"settings#removebot")
-               ],
-               [InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data="settings#bots")]]
-     await query.message.edit_text(
-        TEXT.format(_bot['name'], _bot['id'], _bot['username']),
-        reply_markup=InlineKeyboardMarkup(buttons))
-                                             
-  elif type=="removebot":
-     await db.remove_bot(user_id)
-     await query.message.edit_text(
-        "Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Uᴩᴅᴀᴛᴇᴅ ✓",
-        reply_markup=InlineKeyboardMarkup(buttons))
-                                             
-  elif type.startswith("editchannels"): 
-     chat_id = type.split('_')[1]
-     chat = await db.get_channel_details(user_id, chat_id)
-     buttons = [[InlineKeyboardButton('⛒ Rᴇᴍᴏᴠᴇ ⛒', callback_data=f"settings#removechannel_{chat_id}")
-               ],
-               [InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data="settings#channels")]]
-     await query.message.edit_text(
-        f"<b><u>📄 Cʜᴀɴɴᴇʟ Dᴇᴛᴀɪʟꜱ</b></u>\n\n<b>Tɪᴛʟᴇ :</b> <code>{chat['title']}</code>\n<b>Cʜᴀɴɴᴇʟ ID :</b> <code>{chat['chat_id']}</code>\n<b>Uꜱᴇʀɴᴀᴍᴇ :</b> {chat['username']}",
-        reply_markup=InlineKeyboardMarkup(buttons))
-                                             
-  elif type.startswith("removechannel"):
-     chat_id = type.split('_')[1]
-     await db.remove_channel(user_id, chat_id)
-     await query.message.edit_text(
-        "Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Uᴩᴅᴀᴛᴇᴅ ✓",
-        reply_markup=InlineKeyboardMarkup(buttons))
-                               
-  elif type=="caption":
-     buttons = []
-     data = await get_configs(user_id)
-     caption = data['caption']
-     if caption is None:
-        buttons.append([InlineKeyboardButton('⨁ Aᴅᴅ Cᴀᴩᴛɪᴏɴ ⨁', 
-                      callback_data="settings#addcaption")])
-     else:
-        buttons.append([InlineKeyboardButton('↳ Sᴇᴇ Cᴀᴩᴛɪᴏɴ', 
-                      callback_data="settings#seecaption")])
-        buttons[-1].append(InlineKeyboardButton('↳ Dᴇʟᴇᴛᴇ Cᴀᴩᴛɪᴏɴ', 
-                      callback_data="settings#deletecaption"))
-     buttons.append([InlineKeyboardButton('⇇ Bᴀᴄᴋ', 
-                      callback_data="settings#main")])
-     await query.message.edit_text(
-        "<b><u>Custom Caption</b></u>\n\nYou Can Set A Custom Caption To Videos And Documents. Normaly Use Its Default Caption\n\n<b><u>Available Fillings :</b></u>\n\n<code>{filename}</code> : Filename\n<code>{size}</code> : File Size\n<code>{caption}</code> : Default Caption",
-        reply_markup=InlineKeyboardMarkup(buttons))
-                               
-  elif type=="seecaption":   
-     data = await get_configs(user_id)
-     buttons = [[InlineKeyboardButton('↳ Eᴅɪᴛ Cᴀᴩᴛɪᴏɴ', 
-                  callback_data="settings#addcaption")
-               ],[
-               InlineKeyboardButton('⇇ Bᴀᴄᴋ', 
-                 callback_data="settings#caption")]]
-     await query.message.edit_text(
-        f"<b><u>Your Custom Caption</b></u>\n\n<code>{data['caption']}</code>",
-        reply_markup=InlineKeyboardMarkup(buttons))
+  try:
+    i, type = query.data.split("#")
+    buttons = [[InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data="settings#main")]]
     
-  elif type=="deletecaption":
-     await update_configs(user_id, 'caption', None)
-     await query.message.edit_text(
-        "Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Uᴩᴅᴀᴛᴇᴅ ✓",
-        reply_markup=InlineKeyboardMarkup(buttons))
-                              
-  elif type=="addcaption":
-     await query.message.delete()
-     try:
-         text = await bot.send_message(query.message.chat.id, "Send your custom caption\n/cancel - <code>cancel this process</code>")
-         caption = await bot.listen(chat_id=user_id, timeout=300)
-         if caption.text=="/cancel":
-            await caption.delete()
-            return await text.edit_text(
-                  "Pʀᴏᴄᴇꜱꜱ Cᴀɴᴄᴇʟʟᴇᴅ !",
-                  reply_markup=InlineKeyboardMarkup(buttons))
-         try:
-            caption.text.format(filename='', size='', caption='')
-         except KeyError as e:
-            await caption.delete()
-            return await text.edit_text(
-               f"Wrong Filling {e} Used In Your Caption. Change It",
-               reply_markup=InlineKeyboardMarkup(buttons))
-         await update_configs(user_id, 'caption', caption.text)
-         await caption.delete()
-         await text.edit_text(
-            "Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Uᴩᴅᴀᴛᴇᴅ ✓",
-            reply_markup=InlineKeyboardMarkup(buttons))
-     except asyncio.exceptions.TimeoutError:
-         await text.edit_text('Process Has Been Automatically Cancelled', reply_markup=InlineKeyboardMarkup(buttons))
-  
-  elif type=="button":
-     buttons = []
-     button = (await get_configs(user_id))['button']
-     if button is None:
-        buttons.append([InlineKeyboardButton('⨁ Aᴅᴅ Bᴜᴛᴛᴏɴ ⨁', 
-                      callback_data="settings#addbutton")])
-     else:
-        buttons.append([InlineKeyboardButton('↳ Sᴇᴇ Bᴜᴛᴛᴏɴ', 
-                      callback_data="settings#seebutton")])
-        buttons[-1].append(InlineKeyboardButton('↳ Rᴇᴍᴏᴠᴇ Bᴜᴛᴛᴏɴ ', 
-                      callback_data="settings#deletebutton"))
-     buttons.append([InlineKeyboardButton('⇇ Bᴀᴄᴋ', 
-                      callback_data="settings#main")])
-     await query.message.edit_text(
-        "<b><u>Cᴜꜱᴛᴏᴍ Bᴜᴛᴛᴏɴ</b></u>\n\nYᴏᴜ Cᴀɴ Sᴇᴛ Aɴ Iɴʟɪɴᴇ Bᴜᴛᴛᴏɴ To Mᴇꜱꜱᴀɢᴇꜱ Wʜɪᴄʜ Wɪʟʟ Bᴇ Fᴏʀᴡᴀʀᴅᴇᴅ.\n\n<b><u>Fᴏʀᴍᴀᴛ :</b></u>\n`[Mᴏᴅ Mᴏᴠɪᴇᴢ x][buttonurl:https://t.me/Mod_Moviez_X]`\n",
-        reply_markup=InlineKeyboardMarkup(buttons))
-  
-  elif type=="addbutton":
-     await query.message.delete()
-     try:
-         txt = await bot.send_message(user_id, text="**Send your custom button.\n\nFORMAT:**\n`[forward bot][buttonurl:https://t.me/KR_Forward_Bot]`\n")
-         ask = await bot.listen(chat_id=user_id, timeout=300)
-         button = parse_buttons(ask.text.html)
-         if not button:
-            await ask.delete()
-            return await txt.edit_text("Iɴᴠᴀʟɪᴅ Bᴜᴛᴛᴏɴ ⛒")
-         await update_configs(user_id, 'button', ask.text.html)
-         await ask.delete()
-         await txt.edit_text("Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Bᴜᴛᴛᴏɴ Aᴅᴅᴇᴅ ✓",
-            reply_markup=InlineKeyboardMarkup(buttons))
-     except asyncio.exceptions.TimeoutError:
-         await txt.edit_text('Process Has Been Automatically Cancelled', reply_markup=InlineKeyboardMarkup(buttons))
-  
-  elif type=="seebutton":
-      button = (await get_configs(user_id))['button']
-      button = parse_buttons(button, markup=False)
-      button.append([InlineKeyboardButton("⇇ Bᴀᴄᴋ", "settings#button")])
-      await query.message.edit_text(
-         "**Your Custom Button**",
-         reply_markup=InlineKeyboardMarkup(button))
-      
-  elif type=="deletebutton":
-     await update_configs(user_id, 'button', None)
-     await query.message.edit_text(
-        "Successfully Button Deleted",
-        reply_markup=InlineKeyboardMarkup(buttons))
-   
-  elif type=="database":
-     buttons = []
-     db_uri = (await get_configs(user_id))['db_uri']
-     if db_uri is None:
-        buttons.append([InlineKeyboardButton('⨁ Add URL ⨁', 
-                      callback_data="settings#addurl")])
-     else:
-        buttons.append([InlineKeyboardButton('↳ See URL', 
-                      callback_data="settings#seeurl")])
-        buttons[-1].append(InlineKeyboardButton('↳ Remove URL', 
-                      callback_data="settings#deleteurl"))
-     buttons.append([InlineKeyboardButton('⇇ Bᴀᴄᴋ', 
-                      callback_data="settings#main")])
-     await query.message.edit_text(
-        "<b><u>Database</u></b>\n\nDatabase Is Required For Store Your Duplicate Messages Permenant. Other Wise Stored Duplicate Media May Be Disappeared When After Bot Restart.",
-        reply_markup=InlineKeyboardMarkup(buttons))
-
-  elif type=="addurl":
-     await query.message.delete()
-     uri = await bot.ask(user_id, "<b>please send your mongodb url.</b>\n\n<i>get your Mongodb url from [here](https://mongodb.com)</i>", disable_web_page_preview=True)
-     if uri.text=="/cancel":
-        return await uri.reply_text(
-                  "Pʀᴏᴄᴇꜱꜱ Cᴀɴᴄᴇʟʟᴇᴅ !",
-                  reply_markup=InlineKeyboardMarkup(buttons))
-     if not uri.text.startswith("mongodb+srv://") and not uri.text.endswith("majority"):
-        return await uri.reply("Iɴᴠᴀʟɪᴅ MᴏɴɢᴏDB Uʀʟ ⛒, Aᴠᴏᴏᴅ '/' Iɴ Eɴᴅ Iꜰ Tʜᴇʀᴇ Iᴛ Iꜱ Aᴠᴀɪʟᴀʙʟᴇ",
+    if type=="main":
+       await query.message.edit_text(
+         "<b>Cʜᴀɴɢᴇ Yᴏᴜʀ Sᴇᴛᴛɪɴɢꜱ Aꜱ Pᴇʀ Yᴏᴜʀ Nᴇᴇᴅꜱ! ❄️</b>",
+         reply_markup=main_buttons())
+         
+    elif type=="bots":
+       buttons = [] 
+       _bot = await db.get_bot(user_id)
+       if _bot is not None:
+          buttons.append([InlineKeyboardButton(_bot['name'],
+                           callback_data=f"settings#editbot")])
+       else:
+          buttons.append([InlineKeyboardButton('⨁ Aᴅᴅ Bᴏᴛ ⨁', 
+                           callback_data="settings#addbot")])
+          buttons.append([InlineKeyboardButton('⨁ Aᴅᴅ Uꜱᴇʀ Bᴏᴛ ⨁', 
+                           callback_data="settings#adduserbot")])
+       buttons.append([InlineKeyboardButton('⇇ Bᴀᴄᴋ', 
+                        callback_data="settings#main")])
+       await query.message.edit_text(
+         "<b><u>Mʏ Bᴏᴛꜱ</u></b>\n\nYᴏᴜ Cᴀɴ Mᴀɴᴀɢᴇ Yᴏᴜʀ Bᴏᴛꜱ Iɴ Hᴇʀᴇ \nAᴅᴅ Tʜɪꜱ Bᴏᴛ Tᴀʀɢᴇᴛ Cʜᴀᴛ ᴀɴᴅ Sᴏᴜʀᴄᴇ Cʜᴀᴛ ✨",
+         reply_markup=InlineKeyboardMarkup(buttons))
+    
+    elif type=="addbot":
+       await query.message.delete()
+       add_bot_status = await CLIENT.add_bot(bot, query)
+       if add_bot_status != True: return
+       await query.message.reply_text(
+          "<b>Bᴏᴛ Tᴏᴋᴇɴ Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Aᴅᴅᴇᴅ Tᴏ Dᴀᴛᴀʙᴀꜱᴇ ✓</b>",
+          reply_markup=InlineKeyboardMarkup(buttons))
+    
+    elif type=="adduserbot":
+       await query.message.delete()
+       user = await CLIENT.add_session(bot, query)
+       if user != True: return
+       await query.message.reply_text(
+          "<b>Sᴇꜱꜱɪᴏɴ Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Aᴅᴅᴇᴅ Tᴏ Dᴀᴛᴀʙᴀꜱᴇ ✓</b>",
+          reply_markup=InlineKeyboardMarkup(buttons))
+        
+    elif type=="channels":
+       buttons = []
+       channels = await db.get_user_channels(user_id)
+       for channel in channels:
+          buttons.append([InlineKeyboardButton(f"⁕ {channel['title']}",
+                           callback_data=f"settings#editchannels_{channel['chat_id']}")])
+       buttons.append([InlineKeyboardButton('⨁ Aᴅᴅ Cʜᴀɴɴᴇʟ ⨁', 
+                        callback_data="settings#addchannel")])
+       buttons.append([InlineKeyboardButton('⇇ Bᴀᴄᴋ', 
+                        callback_data="settings#main")])
+       await query.message.edit_text( 
+         "<b><u>Mʏ Cʜᴀɴɴᴇʟꜱ</u></b>\n\nYᴏᴜ Cᴀɴ Mᴀɴᴀɢᴇ Yᴏᴜʀ Tᴀʀɢᴇᴛ Cʜᴀᴛꜱ Iɴ Hᴇʀᴇ!",
+         reply_markup=InlineKeyboardMarkup(buttons))
+     
+    elif type=="addchannel":  
+       await query.message.delete()
+       try:
+           text = await bot.send_message(user_id, "<b><u>Sᴇᴛ Tᴀʀɢᴇᴛ Cʜᴀᴛ</u></b>\n\nFᴏʀᴡᴀʀᴅ A Mᴇꜱꜱᴀɢᴇ Fʀᴏᴍ Yᴏᴜʀ Tᴀʀɢᴇᴛ Cʜᴀᴛ\n/cancel - To Cancel This Process")
+           chat_ids = await bot.listen(chat_id=user_id, timeout=300)
+           if chat_ids.text=="/cancel":
+              await chat_ids.delete()
+              return await text.edit_text(
+                    "Pʀᴏᴄᴇꜱꜱ Cᴀɴᴄᴇʟʟᴇᴅ !",
+                    reply_markup=InlineKeyboardMarkup(buttons))
+           elif not chat_ids.forward_date:
+              await chat_ids.delete()
+              return await text.edit_text("Tʜɪꜱ Iꜱ Nᴏᴛ A Fᴏʀᴡᴀʀᴅᴇᴅ Mᴇꜱꜱᴀɢᴇ!")
+           else:
+              chat_id = chat_ids.forward_from_chat.id
+              title = chat_ids.forward_from_chat.title
+              username = chat_ids.forward_from_chat.username
+              username = "@" + username if username else "private"
+              
+           # Check for duplicate channel before adding
+           if await db.in_channel(user_id, chat_id):
+               await chat_ids.delete()
+               await text.edit_text(
+                   "Tʜɪꜱ Cʜᴀɴɴᴇʟ Iꜱ Aʟʀᴇᴀᴅʏ Aᴅᴅᴇᴅ!",
                    reply_markup=InlineKeyboardMarkup(buttons))
-     await update_configs(user_id, 'db_uri', uri.text)
-     await uri.reply("Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Dᴀᴛᴀʙᴀꜱᴇ Uʀʟ Aᴅᴅᴇᴅ ✓",
-             reply_markup=InlineKeyboardMarkup(buttons))
-  
-  elif type=="seeurl":
-     db_uri = (await get_configs(user_id))['db_uri']
-     await query.answer(f"Dᴀᴛᴀʙᴀꜱᴇ Uʀʟ : {db_uri}", show_alert=True)
-  
-  elif type=="deleteurl":
-     await update_configs(user_id, 'db_uri', None)
-     await query.message.edit_text(
-        "Successfully Your Database URL Deleted",
-        reply_markup=InlineKeyboardMarkup(buttons))
+           else:
+               await db.add_channel(user_id, chat_id, title, username)
+               await chat_ids.delete()
+               await text.edit_text(
+                   "Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Uᴩᴅᴀᴛᴇᴅ ✓",
+                   reply_markup=InlineKeyboardMarkup(buttons))
+       except asyncio.exceptions.TimeoutError:
+           await text.edit_text('Pʀᴏᴄᴇꜱꜱ Hᴀꜱ Bᴇᴇɴ Cᴀɴᴄᴇʟʟᴇᴅ Aᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ Dᴜᴇ Tᴏ Nᴏ Rᴇꜱᴩᴏɴꜱᴇ!', reply_markup=InlineKeyboardMarkup(buttons))
+    
+    elif type=="editbot": 
+       _bot = await db.get_bot(user_id)
+       TEXT = Translation.BOT_DETAILS if _bot.get('is_bot') else Translation.USER_DETAILS
+       buttons = [[InlineKeyboardButton('⛒ Rᴇᴍᴏᴠᴇ ⛒', callback_data=f"settings#removebot")
+                 ],
+                 [InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data="settings#bots")]]
+       await query.message.edit_text(
+          TEXT.format(_bot['name'], _bot['id'], _bot['username']),
+          reply_markup=InlineKeyboardMarkup(buttons))
+                                               
+    elif type=="removebot":
+       await db.remove_bot(user_id)
+       await query.message.edit_text(
+          "Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Uᴩᴅᴀᴛᴇᴅ ✓",
+          reply_markup=InlineKeyboardMarkup(buttons))
+                                               
+    elif type.startswith("editchannels"): 
+       chat_id = type.split('_')[1]
+       chat = await db.get_channel_details(user_id, chat_id)
+       buttons = [[InlineKeyboardButton('⛒ Rᴇᴍᴏᴠᴇ ⛒', callback_data=f"settings#removechannel_{chat_id}")
+                 ],
+                 [InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data="settings#channels")]]
+       await query.message.edit_text(
+          f"<b><u>📄 Cʜᴀɴɴᴇʟ Dᴇᴛᴀɪʟꜱ</b></u>\n\n<b>Tɪᴛʟᴇ :</b> <code>{chat['title']}</code>\n<b>Cʜᴀɴɴᴇʟ ID :</b> <code>{chat['chat_id']}</code>\n<b>Uꜱᴇʀɴᴀᴍᴇ :</b> {chat['username']}",
+          reply_markup=InlineKeyboardMarkup(buttons))
+                                               
+    elif type.startswith("removechannel"):
+       chat_id = type.split('_')[1]
+       await db.remove_channel(user_id, chat_id)
+       await query.message.edit_text(
+          "Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Uᴩᴅᴀᴛᴇᴅ ✓",
+          reply_markup=InlineKeyboardMarkup(buttons))
+                                 
+    elif type=="caption":
+       buttons = []
+       data = await get_configs(user_id)
+       caption = data['caption']
+       if caption is None:
+          buttons.append([InlineKeyboardButton('⨁ Aᴅᴅ Cᴀᴩᴛɪᴏɴ ⨁', 
+                        callback_data="settings#addcaption")])
+       else:
+          buttons.append([InlineKeyboardButton('↳ Sᴇᴇ Cᴀᴩᴛɪᴏɴ', 
+                        callback_data="settings#seecaption")])
+          buttons[-1].append(InlineKeyboardButton('↳ Dᴇʟᴇᴛᴇ Cᴀᴩᴛɪᴏɴ', 
+                        callback_data="settings#deletecaption"))
+       buttons.append([InlineKeyboardButton('⇇ Bᴀᴄᴋ', 
+                        callback_data="settings#main")])
+       await query.message.edit_text(
+          "<b><u>Custom Caption</b></u>\n\nYou Can Set A Custom Caption To Videos And Documents. Normaly Use Its Default Caption\n\n<b><u>Available Fillings :</b></u>\n\n<code>{filename}</code> : Filename\n<code>{size}</code> : File Size\n<code>{caption}</code> : Default Caption",
+          reply_markup=InlineKeyboardMarkup(buttons))
+                                 
+    elif type=="seecaption":   
+       data = await get_configs(user_id)
+       buttons = [[InlineKeyboardButton('↳ Eᴅɪᴛ Cᴀᴩᴛɪᴏɴ', 
+                    callback_data="settings#addcaption")
+                 ],[
+                 InlineKeyboardButton('⇇ Bᴀᴄᴋ', 
+                   callback_data="settings#caption")]]
+       await query.message.edit_text(
+          f"<b><u>Your Custom Caption</b></u>\n\n<code>{data['caption']}</code>",
+          reply_markup=InlineKeyboardMarkup(buttons))
       
-  elif type=="filters":
-     await query.message.edit_text(
-        "<b><u>Custom Filters</u></b>\n\nConfigure The Type Of Messages Which You Want Forward",
-        reply_markup=await filters_buttons(user_id))
-  
-  elif type=="nextfilters":
-     await query.edit_message_reply_markup( 
-        reply_markup=await next_filters_buttons(user_id))
-   
-  elif type.startswith("updatefilter"):
-     i, key, value = type.split('-')
-     if value=="True":
-        await update_configs(user_id, key, False)
-     else:
-        await update_configs(user_id, key, True)
-     if key in ['poll', 'protect']:
-        return await query.edit_message_reply_markup(
-           reply_markup=await next_filters_buttons(user_id)) 
-     await query.edit_message_reply_markup(
-        reply_markup=await filters_buttons(user_id))
-   
-  elif type.startswith("file_size"):
-    settings = await get_configs(user_id)
-    size = settings.get('file_size', 0)
-    i, limit = size_limit(settings['size_limit'])
-    await query.message.edit_text(
-       f'<b><u>Sɪᴢᴇ Lɪᴍɪᴛ</u></b>\n\nYᴏᴜ Cᴀɴ Sᴇᴛ Fɪʟᴇ Sɪᴢᴇ Lɪᴍɪᴛ To Fᴏᴡᴀʀᴅ\n\nSᴛᴀᴛᴜꜱ : Fɪʟᴇꜱ Wɪᴛʜ {limit} `{size} ᴍʙ` Wɪʟʟ Bᴇ Fᴏʀᴡᴀʀᴅ',
-       reply_markup=size_button(size))
-  
-  elif type.startswith("update_size"):
-    size = int(query.data.split('-')[1])
-    if 0 < size > 2000:
-      return await query.answer("Size Limit Exceeded", show_alert=True)
-    await update_configs(user_id, 'file_size', size)
-    i, limit = size_limit((await get_configs(user_id))['size_limit'])
-    await query.message.edit_text(
-       f'<b><u>Sɪᴢᴇ Lɪᴍɪᴛ</u></b>\n\nYᴏᴜ Fᴏᴡᴀʀᴅ Tᴏ Fᴏᴡᴀʀᴅ\n\nSᴛᴀᴛᴜꜱ : Fɪʟᴇꜱ Wɪᴛʜ {limit} `{size} ᴍʙ` Wɪʟʟ Fᴏʀᴡᴀʀᴅ',
-       reply_markup=size_button(int(size)))
-  
-  elif type.startswith('update_limit'):
-    i, limit, size = type.split('-')
-    limit, sts = size_limit(limit)
-    await update_configs(user_id, 'size_limit', limit) 
-    await query.message.edit_text(
-       f'<b><u>Size Limit</u></b>\n\nYou Can Set File Size Limit To Forward\n\nStatus : Files With {sts} `{size} MB` Will Forward',
-       reply_markup=size_button(int(size)))
-      
-  elif type == "add_extension":
-    await query.message.delete() 
-    ext = await bot.ask(user_id, text="Please Send Your Extensions (Seperete By Space)")
-    if ext.text == '/cancel':
-       return await ext.reply_text(
-                  "Pʀᴏᴄᴇꜱꜱ Cᴀɴᴄᴇʟʟᴇᴅ !",
-                  reply_markup=InlineKeyboardMarkup(buttons))
-    extensions = ext.text.split(" ")
-    extension = (await get_configs(user_id))['extension']
-    if extension:
-        for extn in extensions:
-            extension.append(extn)
-    else:
-        extension = extensions
-    await update_configs(user_id, 'extension', extension)
-    await ext.reply_text(
-        f"Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Uᴩᴅᴀᴛᴇᴅ ✓",
-        reply_markup=InlineKeyboardMarkup(buttons))
-      
-  elif type == "get_extension":
-    extensions = (await get_configs(user_id))['extension']
-    btn = extract_btn(extensions)
-    btn.append([InlineKeyboardButton('⨁ Add ⨁', 'settings#add_extension')])
-    btn.append([InlineKeyboardButton('Remove All', 'settings#rmve_all_extension')])
-    btn.append([InlineKeyboardButton('⇇ Bᴀᴄᴋ', 'settings#main')])
-    await query.message.edit_text(
-        text='<b><u>Extensions</u></b>\n\nFiles With These Extiontions Will Not Forward',
-        reply_markup=InlineKeyboardMarkup(btn))
-  
-  elif type == "rmve_all_extension":
-    await update_configs(user_id, 'extension', None)
-    await query.message.edit_text(text="Successfully Deleted",
-                                   reply_markup=InlineKeyboardMarkup(buttons))
-  elif type == "add_keyword":
-    await query.message.delete()
-    ask = await bot.ask(user_id, text="Please Send The Keywords (Seperete By Space)")
-    if ask.text == '/cancel':
-       return await ask.reply_text(
-                  "Pʀᴏᴄᴇꜱꜱ Cᴀɴᴄᴇʟʟᴇᴅ !",
-                  reply_markup=InlineKeyboardMarkup(buttons))
-    keywords = ask.text.split(" ")
-    keyword = (await get_configs(user_id))['keywords']
-    if keyword:
-        for word in keywords:
-            keyword.append(word)
-    else:
-        keyword = keywords
-    await update_configs(user_id, 'keywords', keyword)
-    await ask.reply_text(
-        f"Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Uᴩᴅᴀᴛᴇᴅ ✓",
-        reply_markup=InlineKeyboardMarkup(buttons))
-  
-  elif type == "get_keyword":
-    keywords = (await get_configs(user_id))['keywords']
-    btn = extract_btn(keywords)
-    btn.append([InlineKeyboardButton('⨁ Aᴅᴅ ⨁', 'settings#add_keyword')])
-    btn.append([InlineKeyboardButton('Rᴇᴍᴏᴠᴇ Aʟʟ', 'settings#rmve_all_keyword')])
-    btn.append([InlineKeyboardButton('⇇ Bᴀᴄᴋ', 'settings#main')])
-    await query.message.edit_text(
-        text='<b><u>Keywords</u></b>\n\nFile With These Keywords In File Name Will Forwad',
-        reply_markup=InlineKeyboardMarkup(btn))
-      
-  elif type == "rmve_all_keyword":
-    await update_configs(user_id, 'keywords', None)
-    await query.message.edit_text(text="Successfully Deleted",
-                                   reply_markup=InlineKeyboardMarkup(buttons))
-  elif type.startswith("alert"):
-    alert = type.split('_')[1]
-    await query.answer(alert, show_alert=True)
+    elif type=="deletecaption":
+       await update_configs(user_id, 'caption', None)
+       await query.message.edit_text(
+          "Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Uᴩᴅᴀᴛᴇᴅ ✓",
+          reply_markup=InlineKeyboardMarkup(buttons))
+                                
+    elif type=="addcaption":
+       await query.message.delete()
+       try:
+           text = await bot.send_message(query.message.chat.id, "Send your custom caption\n/cancel - <code>cancel this process</code>")
+           caption = await bot.listen(chat_id=user_id, timeout=300)
+           if caption.text=="/cancel":
+              await caption.delete()
+              return await text.edit_text(
+                    "Pʀᴏᴄᴇꜱꜱ Cᴀɴᴄᴇʟʟᴇᴅ !",
+                    reply_markup=InlineKeyboardMarkup(buttons))
+           try:
+              caption.text.format(filename='', size='', caption='')
+           except KeyError as e:
+              await caption.delete()
+              return await text.edit_text(
+                 f"Wrong Filling {e} Used In Your Caption. Change It",
+                 reply_markup=InlineKeyboardMarkup(buttons))
+           await update_configs(user_id, 'caption', caption.text)
+           await caption.delete()
+           await text.edit_text(
+              "Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Uᴩᴅᴀᴛᴇᴅ ✓",
+              reply_markup=InlineKeyboardMarkup(buttons))
+       except asyncio.exceptions.TimeoutError:
+           await text.edit_text('Process Has Been Automatically Cancelled', reply_markup=InlineKeyboardMarkup(buttons))
+    
+    elif type=="button":
+       buttons = []
+       button = (await get_configs(user_id))['button']
+       if button is None:
+          buttons.append([InlineKeyboardButton('⨁ Aᴅᴅ Bᴜᴛᴛᴏɴ ⨁', 
+                        callback_data="settings#addbutton")])
+       else:
+          buttons.append([InlineKeyboardButton('↳ Sᴇᴇ Bᴜᴛᴛᴏɴ', 
+                        callback_data="settings#seebutton")])
+          buttons[-1].append(InlineKeyboardButton('↳ Rᴇᴍᴏᴠᴇ Bᴜᴛᴛᴏɴ ', 
+                        callback_data="settings#deletebutton"))
+       buttons.append([InlineKeyboardButton('⇇ Bᴀᴄᴋ', 
+                        callback_data="settings#main")])
+       await query.message.edit_text(
+          "<b><u>Cᴜꜱᴛᴏᴍ Bᴜᴛᴛᴏɴ</b></u>\n\nYᴏᴜ Cᴀɴ Sᴇᴛ Aɴ Iɴʟɪɴᴇ Bᴜᴛᴛᴏɴ To Mᴇꜱꜱᴀɢᴇꜱ Wʜɪᴄʜ Wɪʟʟ Bᴇ Fᴏʀᴡᴀʀᴅᴇᴅ.\n\n<b><u>Fᴏʀᴍᴀᴛ :</b></u>\n`[Mᴏᴅ Mᴏᴠɪᴇᴢ x][buttonurl:https://t.me/Mod_Moviez_X]`\n",
+          reply_markup=InlineKeyboardMarkup(buttons))
+    
+    elif type=="addbutton":
+       await query.message.delete()
+       try:
+           txt = await bot.send_message(user_id, text="**Send your custom button.\n\nFORMAT:**\n`[forward bot][buttonurl:https://t.me/KR_Forward_Bot]`\n")
+           ask = await bot.listen(chat_id=user_id, timeout=300)
+           button = parse_buttons(ask.text.html)
+           if not button:
+              await ask.delete()
+              return await txt.edit_text("Iɴᴠᴀʟɪᴅ Bᴜᴛᴛᴏɴ ⛒")
+           await update_configs(user_id, 'button', ask.text.html)
+           await ask.delete()
+           await txt.edit_text("Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Bᴜᴛᴛᴏɴ Aᴅᴅᴇᴅ ✓",
+              reply_markup=InlineKeyboardMarkup(buttons))
+       except asyncio.exceptions.TimeoutError:
+           await txt.edit_text('Process Has Been Automatically Cancelled', reply_markup=InlineKeyboardMarkup(buttons))
+    
+    elif type=="seebutton":
+        button = (await get_configs(user_id))['button']
+        button = parse_buttons(button, markup=False)
+        button.append([InlineKeyboardButton("⇇ Bᴀᴄᴋ", "settings#button")])
+        await query.message.edit_text(
+           "**Your Custom Button**",
+           reply_markup=InlineKeyboardMarkup(button))
+        
+    elif type=="deletebutton":
+       await update_configs(user_id, 'button', None)
+       await query.message.edit_text(
+          "Successfully Button Deleted",
+          reply_markup=InlineKeyboardMarkup(buttons))
+     
+    elif type=="database":
+       buttons = []
+       db_uri = (await get_configs(user_id))['db_uri']
+       if db_uri is None:
+          buttons.append([InlineKeyboardButton('⨁ Add URL ⨁', 
+                        callback_data="settings#addurl")])
+       else:
+          buttons.append([InlineKeyboardButton('↳ See URL', 
+                        callback_data="settings#seeurl")])
+          buttons[-1].append(InlineKeyboardButton('↳ Remove URL', 
+                        callback_data="settings#deleteurl"))
+       buttons.append([InlineKeyboardButton('⇇ Bᴀᴄᴋ', 
+                        callback_data="settings#main")])
+       await query.message.edit_text(
+          "<b><u>Database</u></b>\n\nDatabase Is Required For Store Your Duplicate Messages Permenant. Other Wise Stored Duplicate Media May Be Disappeared When After Bot Restart.",
+          reply_markup=InlineKeyboardMarkup(buttons))
+
+    elif type=="addurl":
+       await query.message.delete()
+       uri = await bot.ask(user_id, "<b>please send your mongodb url.</b>\n\n<i>get your Mongodb url from [here](https://mongodb.com)</i>", disable_web_page_preview=True)
+       if uri.text=="/cancel":
+          return await uri.reply_text(
+                    "Pʀᴏᴄᴇꜱꜱ Cᴀɴᴄᴇʟʟᴇᴅ !",
+                    reply_markup=InlineKeyboardMarkup(buttons))
+       if not uri.text.startswith("mongodb+srv://") and not uri.text.endswith("majority"):
+          return await uri.reply("Iɴᴠᴀʟɪᴅ MᴏɴɢᴏDB Uʀʟ ⛒, Aᴠᴏᴏᴅ '/' Iɴ Eɴᴅ Iꜰ Tʜᴇʀᴇ Iᴛ Iꜱ Aᴠᴀɪʟᴀʙʟᴇ",
+                     reply_markup=InlineKeyboardMarkup(buttons))
+       await update_configs(user_id, 'db_uri', uri.text)
+       await uri.reply("Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Dᴀᴛᴀʙᴀꜱᴇ Uʀʟ Aᴅᴅᴇᴅ ✓",
+               reply_markup=InlineKeyboardMarkup(buttons))
+    
+    elif type=="seeurl":
+       db_uri = (await get_configs(user_id))['db_uri']
+       await query.answer(f"Dᴀᴛᴀʙᴀꜱᴇ Uʀʟ : {db_uri}", show_alert=True)
+    
+    elif type=="deleteurl":
+       await update_configs(user_id, 'db_uri', None)
+       await query.message.edit_text(
+          "Successfully Your Database URL Deleted",
+          reply_markup=InlineKeyboardMarkup(buttons))
+        
+    elif type=="filters":
+       await query.message.edit_text(
+          "<b><u>Custom Filters</u></b>\n\nConfigure The Type Of Messages Which You Want Forward",
+          reply_markup=await filters_buttons(user_id))
+    
+    elif type=="nextfilters":
+       await query.edit_message_reply_markup( 
+          reply_markup=await next_filters_buttons(user_id))
+     
+    elif type.startswith("updatefilter"):
+       i, key, value = type.split('-')
+       if value=="True":
+          await update_configs(user_id, key, False)
+       else:
+          await update_configs(user_id, key, True)
+       if key in ['poll', 'protect']:
+          return await query.edit_message_reply_markup(
+             reply_markup=await next_filters_buttons(user_id)) 
+       await query.edit_message_reply_markup(
+          reply_markup=await filters_buttons(user_id))
+     
+    elif type.startswith("file_size"):
+      settings = await get_configs(user_id)
+      size = settings.get('file_size', 0)
+      i, limit = size_limit(settings['size_limit'])
+      await query.message.edit_text(
+         f'<b><u>Sɪᴢᴇ Lɪᴍɪᴛ</u></b>\n\nYᴏᴜ Cᴀɴ Sᴇᴛ Fɪʟᴇ Sɪᴢᴇ Lɪᴍɪᴛ To Fᴏᴡᴀʀᴅ\n\nSᴛᴀᴛᴜꜱ : Fɪʟᴇꜱ Wɪᴛʜ {limit} `{size} ᴍʙ` Wɪʟʟ Bᴇ Fᴏʀᴡᴀʀᴅ',
+         reply_markup=size_button(size))
+    
+    elif type.startswith("update_size"):
+      size = int(query.data.split('-')[1])
+      if 0 < size > 2000:
+        return await query.answer("Size Limit Exceeded", show_alert=True)
+      await update_configs(user_id, 'file_size', size)
+      i, limit = size_limit((await get_configs(user_id))['size_limit'])
+      await query.message.edit_text(
+         f'<b><u>Sɪᴢᴇ Lɪᴍɪᴛ</u></b>\n\nYᴏᴜ Fᴏᴡᴀʀᴅ Tᴏ Fᴏᴡᴀʀᴅ\n\nSᴛᴀᴛᴜꜱ : Fɪʟᴇꜱ Wɪᴛʜ {limit} `{size} ᴍʙ` Wɪʟʟ Fᴏʀᴡᴀʀᴅ',
+         reply_markup=size_button(int(size)))
+    
+    elif type.startswith('update_limit'):
+      i, limit, size = type.split('-')
+      limit, sts = size_limit(limit)
+      await update_configs(user_id, 'size_limit', limit) 
+      await query.message.edit_text(
+         f'<b><u>Size Limit</u></b>\n\nYou Can Set File Size Limit To Forward\n\nStatus : Files With {sts} `{size} MB` Will Forward',
+         reply_markup=size_button(int(size)))
+        
+    elif type == "add_extension":
+      await query.message.delete() 
+      ext = await bot.ask(user_id, text="Please Send Your Extensions (Seperete By Space)")
+      if ext.text == '/cancel':
+         return await ext.reply_text(
+                    "Pʀᴏᴄᴇꜱꜱ Cᴀɴᴄᴇʟʟᴇᴅ !",
+                    reply_markup=InlineKeyboardMarkup(buttons))
+      extensions = ext.text.split(" ")
+      extension = (await get_configs(user_id))['extension']
+      if extension:
+          for extn in extensions:
+              extension.append(extn)
+      else:
+          extension = extensions
+      await update_configs(user_id, 'extension', extension)
+      await ext.reply_text(
+          f"Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Uᴩᴅᴀᴛᴇᴅ ✓",
+          reply_markup=InlineKeyboardMarkup(buttons))
+        
+    elif type == "get_extension":
+      extensions = (await get_configs(user_id))['extension']
+      btn = extract_btn(extensions)
+      btn.append([InlineKeyboardButton('⨁ Add ⨁', 'settings#add_extension')])
+      btn.append([InlineKeyboardButton('Remove All', 'settings#rmve_all_extension')])
+      btn.append([InlineKeyboardButton('⇇ Bᴀᴄᴋ', 'settings#main')])
+      await query.message.edit_text(
+          text='<b><u>Extensions</u></b>\n\nFiles With These Extiontions Will Not Forward',
+          reply_markup=InlineKeyboardMarkup(btn))
+    
+    elif type == "rmve_all_extension":
+      await update_configs(user_id, 'extension', None)
+      await query.message.edit_text(text="Successfully Deleted",
+                                     reply_markup=InlineKeyboardMarkup(buttons))
+    elif type == "add_keyword":
+      await query.message.delete()
+      ask = await bot.ask(user_id, text="Please Send The Keywords (Seperete By Space)")
+      if ask.text == '/cancel':
+         return await ask.reply_text(
+                    "Pʀᴏᴄᴇꜱꜱ Cᴀɴᴄᴇʟʟᴇᴅ !",
+                    reply_markup=InlineKeyboardMarkup(buttons))
+      keywords = ask.text.split(" ")
+      keyword = (await get_configs(user_id))['keywords']
+      if keyword:
+          for word in keywords:
+              keyword.append(word)
+      else:
+          keyword = keywords
+      await update_configs(user_id, 'keywords', keyword)
+      await ask.reply_text(
+          f"Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Uᴩᴅᴀᴛᴇᴅ ✓",
+          reply_markup=InlineKeyboardMarkup(buttons))
+    
+    elif type == "get_keyword":
+      keywords = (await get_configs(user_id))['keywords']
+      btn = extract_btn(keywords)
+      btn.append([InlineKeyboardButton('⨁ Aᴅᴅ ⨁', 'settings#add_keyword')])
+      btn.append([InlineKeyboardButton('Rᴇᴍᴏᴠᴇ Aʟʟ', 'settings#rmve_all_keyword')])
+      btn.append([InlineKeyboardButton('⇇ Bᴀᴄᴋ', 'settings#main')])
+      await query.message.edit_text(
+          text='<b><u>Keywords</u></b>\n\nFile With These Keywords In File Name Will Forwad',
+          reply_markup=InlineKeyboardMarkup(btn))
+        
+    elif type == "rmve_all_keyword":
+      await update_configs(user_id, 'keywords', None)
+      await query.message.edit_text(text="Successfully Deleted",
+                                     reply_markup=InlineKeyboardMarkup(buttons))
+    elif type.startswith("alert"):
+      alert = type.split('_')[1]
+      await query.answer(alert, show_alert=True)
+
+  except Exception as e:
+      print(f"Error in settings_query: {e}")
+      # Optionally, notify the user that an error occurred
+      await query.message.reply_text("An unexpected error occurred. Please try again later.")
+
       
 def main_buttons():
   buttons = [[
