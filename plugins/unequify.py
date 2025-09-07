@@ -156,7 +156,7 @@ async def list_userbot_chats(bot: Client, message: Message, user_id: int, userbo
                 except Exception:
                     pass
 
-                chat_list_text += f"{perms} {chat.title} - <code>{chat.id}</code>\n"
+                chat_list_text += f"{perms} {chat.title} (<code>{chat.id}</code>)\n"
 
         # Send as a text file if too long, otherwise as a message
         if len(chat_list_text) > 4096:
