@@ -47,11 +47,11 @@ async def reset_user(client, message):
     
     # Confirmation prompt
     await message.reply_text(
-        "**⚠️ Are you sure?**\n\nThis will delete all your saved bots, userbots, and channel configurations. This action cannot be undone.",
+        "**This will delete all saved bots, userbots, and channel configurations.**\n\nThis action cannot be undone. Are you sure?",
         reply_markup=InlineKeyboardMarkup(
             [
-                [InlineKeyboardButton("✅ Yes, I am sure", callback_data="confirm_reset")],
-                [InlineKeyboardButton("❌ Cancel", callback_data="close_btn")]
+                [InlineKeyboardButton("✓ Yes, I am sure", callback_data="confirm_reset")],
+                [InlineKeyboardButton("« Cancel", callback_data="close_btn")]
             ]
         )
     )
@@ -61,7 +61,7 @@ async def confirm_reset_callback(bot, query):
     user_id = query.from_user.id
     try:
         await db.reset_user_data(user_id)
-        await query.message.edit_text("✅ **Your account has been successfully reset.**\n\nPlease use /start to begin again.")
+        await query.message.edit_text("✓ **Account has been reset.**\n\nUse /start to begin again.")
     except Exception as e:
         await query.message.edit_text(f"An error occurred during reset: `{e}`")
 
@@ -74,8 +74,8 @@ async def restart(client, message):
         text="<i>Restarting...</i>",
         quote=True
     )
-    await asyncio.sleep(2)
-    await msg.edit("<i>Successfully restarted.</i>")
+    await asyncio.sleep(3)
+    await msg.edit("<i>Restarted.</i>")
     os.execl(sys.executable, sys.executable, *sys.argv)
     
 @Client.on_message(filters.command("start") & filters.chat(-1002687879857))
@@ -106,7 +106,7 @@ async def forward_delay(client, message):
     # Explicitly check if the user is banned
     ban_status = await db.get_ban_status(user_id)
     if ban_status["is_banned"]:
-        return await message.reply_text(f"You are banned from using this bot.\n\nReason: {ban_status['ban_reason']}")
+        return await message.reply_text(f"Access denied.\n\nReason: {ban_status['ban_reason']}")
 
     if len(message.command) < 2:
         return await message.reply_text(Translation.FORWARDELAY_TXT)
@@ -117,7 +117,7 @@ async def forward_delay(client, message):
             return await message.reply_text("The delay must be a positive number.")
         
         await update_configs(user_id, 'forward_delay', delay)
-        await message.reply_text(f"Forwarding delay set to `{delay}` seconds.")
+        await message.reply_text(f"Forwarding delay set to {delay} seconds.")
     except ValueError:
         await message.reply_text("Invalid input. Please provide a number.")
 
