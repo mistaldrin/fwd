@@ -39,10 +39,15 @@ class CLIENT:
      client_name = str(uuid4())
      
      if user is None and not data.get('is_bot'):
-        return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, session_string=data.get('session'))
+        # This branch is for userbots when called with a dict
+        return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, session_string=data.get('session'), in_memory=True)
      elif user is True:
-        return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, session_string=data)
+        # This is the branch used by unequify and ubclist.
+        # `data` here is the session_string.
+        # Adding in_memory=True prevents the client from writing a session file, which can cause hanging in some environments.
+        return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, session_string=data, in_memory=True)
      else:
+        # This branch is for regular bots using a token.
         token = data.get('token') if isinstance(data, dict) else data
         return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, bot_token=token, in_memory=True)
   
