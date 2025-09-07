@@ -20,7 +20,7 @@ from typing import Union, Optional, AsyncGenerator
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-BOT_TOKEN_TEXT = "1) Cʀᴇᴀᴛᴇ A Bᴏᴛ Uꜱɪɴɢ @BotFather [ꜱᴇɴᴅ <code>/newbot</code> ᴛᴏ ʙᴏᴛ ꜰᴀᴛʜᴇʀ ᴀɴᴅ ᴛʜᴇ ɴᴀᴍᴇ ᴀɴᴅ ᴜꜱᴇʀɴᴀᴍᴇ ʀᴇꜱᴩᴇᴄᴛɪᴠᴇʟʏ]\n\n2) Tʜᴇɴ Yᴏᴜ Wɪʟʟ Gᴇᴛ A Mᴇꜱꜱᴀɢᴇ Wɪᴛʜ Bᴏᴛ Tᴏᴋᴇɴ\n\n3) Fᴏʀᴡᴀʀᴅ Tʜᴀᴛ Mᴇꜱꜱᴀɢᴇ Tᴏ Mᴇ \n\nIꜰ Yᴏᴜ Hᴀᴠᴇ A Bᴏᴛ Aʟʀᴇᴀᴅʏ, Yᴏᴜ Cᴀɴ Fᴏʀᴡᴀʀᴅ Iᴛꜱ Tᴏᴋᴇɴ Fʀᴏᴍ API Bᴏᴛ Tᴏᴋᴇɴ."
+BOT_TOKEN_TEXT = "1. Go to @BotFather and send `/newbot`.\n\n2. Get the bot token from the reply.\n\n3. Forward that message here.\n\nEasy peasy. (´｡• ᵕ •｡`)"
 SESSION_STRING_SIZE = 351
 
 
@@ -50,20 +50,20 @@ class CLIENT:
      user_id = int(message.from_user.id)
      msg = await bot.ask(chat_id=user_id, text=BOT_TOKEN_TEXT)
      if msg.text=='/cancel':
-        return await msg.reply('<b>Pʀᴏᴄᴇꜱꜱ Cᴀɴᴄᴇʟʟᴇᴅ !</b>')
+        return await msg.reply('Process cancelled.')
      elif not msg.forward_date:
-       return await msg.reply_text("Tʜɪꜱ Iꜱ Nᴏᴛ Fᴏʀᴡᴀʀᴅᴇᴅ Mᴇꜱꜱᴀɢᴇ !")
+       return await msg.reply_text("Not a forwarded message.")
      elif str(msg.forward_from.id) != "93372553":
-       return await msg.reply_text("Tʜɪꜱ Mᴇꜱꜱᴀɢᴇ Wᴀꜱ Nᴏᴛ Fᴏʀᴡᴀʀᴅᴇᴅ Fʀᴏᴍ Tʜᴇ Bᴏᴛ Fᴀᴛʜᴇʀ !")
+       return await msg.reply_text("Message not forwarded from @BotFather.")
      bot_token = re.findall(r'\d[0-9]{8,10}:[0-9A-Za-z_-]{35}', msg.text, re.IGNORECASE)
      bot_token = bot_token[0] if bot_token else None
      if not bot_token:
-       return await msg.reply_text("Tʜᴇʀᴇ Iꜱ No Bᴏᴛ Tᴏᴋᴇɴ Iɴ Tʜᴀᴛ Mᴇꜱꜱᴀɢᴇ !Tʀʏ Aɢᴀɪɴ Pʟᴇᴀꜱᴇ !")
+       return await msg.reply_text("No valid bot token found.")
      try:
        async with self.client(bot_token, False) as _client:
           _bot = await _client.get_me()
      except Exception as e:
-       return await msg.reply_text(f"Bot Error :</b> `{e}` /nFᴏʀᴡᴀʀᴅ ɪᴛ ᴛᴏ @Syd_Xyz Iꜰ ʏᴏᴜ ɴᴇᴇᴅ HELP !")
+       return await msg.reply_text(f"<b>Bot Error:</b> `{e}`\n\nPlease check the token.")
      
      details = {
        'id': _bot.id,
@@ -78,18 +78,18 @@ class CLIENT:
     
   async def add_session(self, bot, message):
      user_id = int(message.from_user.id)
-     text = "<b>⚠️ Dɪꜱᴄʟᴀɪᴍᴇʀ ⚠️</b>\n\nYᴏᴜ Cᴀɴ Uꜱᴇ Yoᴜʀ Sᴇꜱꜱɪᴏɴ Fᴏʀ FᴏʀWᴀʀᴅɪɴɢ Mᴇꜱꜱᴀɢᴇ Fʀᴏᴍ Pʀɪᴠᴀᴛᴇ Cʜᴀᴛ Tᴏ Aɴᴏᴛʜᴇʀ Cʜᴀᴛ.\nPʟᴇᴀꜱᴇ Aᴅᴅ Yᴏᴜʀ <b><u>Pʏʀᴏɢʀᴀᴍ Sᴇꜱꜱɪᴏɴ</u> Wɪᴛʜ Yᴏᴜʀ Oᴡɴ Rɪꜱᴋ </b>. Tʜᴇʀᴇ Iꜱ A Cʜᴀɴᴄᴇ Tᴏ Bᴀɴ Yᴏᴜʀ Aᴄᴄᴏᴜɴᴛ (ꜱᴏ, ꜰᴏᴡᴀʀᴅɪɴɢ ᴡɪʟʟ ʙᴇ ʟɪɪᴛʟᴇ ꜱʟᴏᴡ). Mʏ Dᴇᴠᴇʟᴏᴩᴇʀ <b>Iꜱ Nᴏᴛ Rᴇꜱᴩᴏɴꜱɪʙʟᴇ Iꜰ Yᴏᴜʀ Aᴄᴄᴏᴜɴᴛ Mᴀʏ Gᴇᴛ Bᴀɴɴᴇᴅ! /nUSE THE ACCOUNT WITH WHICH YOU CAN RISK(NOT IMPORTANT).</b>"
+     text = "<b>A friendly heads-up!</b> (｡•̀ᴗ-)✧\n\nUsing a user account for automation can be risky. It's a good idea to use an alternate account for this.\n\nThe developer is not responsible for what happens."
      await bot.send_message(user_id, text=text)
-     msg = await bot.ask(chat_id=user_id, text="<b>Send your pyrogram session.\nget it from @mdsessiongenbot\n\n/cancel - cancel the process</b>")
+     msg = await bot.ask(chat_id=user_id, text="<b>Send the Pyrogram (v2) session string.</b>\n\nGet one from @mdsessiongenbot.\n\n/cancel - to cancel.")
      if msg.text=='/cancel':
-        return await msg.reply('<b>Pʀᴏᴄᴇꜱꜱ Cᴀɴᴄᴇʟʟᴇᴅ !</b>')
+        return await msg.reply('Process cancelled.')
      elif len(msg.text) < SESSION_STRING_SIZE:
-        return await msg.reply('Iɴᴠᴀʟɪᴅ Sᴇꜱꜱɪᴏɴ Sᴛʀɪɴɢ !')
+        return await msg.reply('Not a valid session string.')
      try:
        async with self.client(msg.text, True) as client:
           user = await client.get_me()
      except Exception as e:
-       return await msg.reply_text(f"<b>User Bot Error :</b> `{e}` /nFᴏʀᴡᴀʀᴅ ɪᴛ ᴛᴏ @Syd_Xyz Iꜰ ʏᴏᴜ ɴᴇᴇᴅ HELP !")
+       return await msg.reply_text(f"<b>Userbot Error:</b> `{e}`\n\nPlease check the session string.")
      
      details = {
        'id': user.id,
@@ -106,12 +106,12 @@ class CLIENT:
 async def forward_tag(bot, m):
     default = await db.get_configs("01")
     await db.update_configs(m.from_user.id, default)
-    await m.reply("Successfully Settings Reseted ✔️")
+    await m.reply("Settings have been reset. ✓")
 
 @Client.on_message(filters.command('resetall') & filters.user(Config.OWNER_ID))
 async def resetall(bot, message):
   users = await db.get_all_users()
-  sts = await message.reply("Processing")
+  sts = await message.reply("Processing...")
   TEXT = "Total: {}\nSuccess: {}\nFailed: {}\nExcept: {}"
   total = success = failed = already = 0
   ERRORS = []
