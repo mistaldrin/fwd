@@ -26,13 +26,8 @@ class temp(object):
     IS_FRWD_CHAT = []
     # Dictionaries for managing interactive sessions
     RANGE_SESSIONS = {}
-    UNEQUIFY_SESSIONS = {}
-    USERBOT_CHATS_CACHE = {}
-    # User-specific bot selections for concurrent operations
-    FORWARD_BOT_ID = {}
-    UNEQUIFY_USERBOT_ID = {}
-    # Dictionary for user states in conversational plugins
     USER_STATES = {}
+    FORWARD_BOT_ID = {}
 
 
 
