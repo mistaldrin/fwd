@@ -1,31 +1,48 @@
 import re
-import asyncio 
+import asyncio
 from .utils import STS, start_range_selection, update_range_message
 from database import db
-from config import temp 
+from config import temp
 from translation import Translation
 from pyrogram import Client, filters, enums
 from pyrogram.errors import FloodWait, UserNotParticipant
 from pyrogram.errors.exceptions.not_acceptable_406 import ChannelPrivate as PrivateChat
 from pyrogram.errors.exceptions.bad_request_400 import ChannelInvalid, ChatAdminRequired, UsernameInvalid, UsernameNotModified, ChannelPrivate
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
- 
+
 SYD_CHANNELS = ["norFederation"]
 
 #===================Run Function===================#
 
 @Client.on_message(filters.private & filters.command(["fwd", "forward"]))
 async def run(bot, message):
-    buttons = []
-    btn_data = {}
     user_id = message.from_user.id
-    _bot = await db.get_bot(user_id)
-    if not _bot:
-      return await message.reply("Yᴏᴜ Dɪᴅ Nᴏᴛ Aᴅᴅᴇᴅ Aɴʏ Bᴏᴛ. Pʟᴇᴀꜱᴇ Aᴅᴅ A Bᴏᴛ Uꜱɪɴɢ /settings !")
+    bots = await db.get_bots(user_id)
+    if not bots:
+        return await message.reply("Yᴏᴜ Dɪᴅ Nᴏᴛ Aᴅᴅᴇᴅ Aɴʏ Bᴏᴛ. Pʟᴇᴀꜱᴇ Aᴅᴅ A Bᴏᴛ Uꜱɪɴɢ /settings !")
+
+    if len(bots) == 1:
+        await choose_target_chat(bot, message, bots[0]['id'])
+    else:
+        buttons = []
+        for _bot in bots:
+            buttons.append([InlineKeyboardButton(_bot['name'], callback_data=f"select_bot_{_bot['id']}")])
+        buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="close_btn")])
+        await message.reply_text("<b><u>Select a Bot</u></b>\n\nChoose the bot you want to use for forwarding.", reply_markup=InlineKeyboardMarkup(buttons))
+
+@Client.on_callback_query(filters.regex(r'^select_bot_'))
+async def select_bot_callback(bot, query):
+    bot_id = int(query.data.split('_')[2])
+    await query.message.delete()
+    await choose_target_chat(bot, query.message, bot_id)
+
+async def choose_target_chat(bot, message, bot_id):
+    buttons = []
+    user_id = message.from_user.id
     channels = await db.get_user_channels(user_id)
     if not channels:
        return await message.reply_text("Please Set A To Channel In /settings Before Forwarding")
-        
+
     if len(channels) > 0:
        # Use a set to store unique channel IDs to prevent duplicate buttons
        unique_channels = []
@@ -34,12 +51,12 @@ async def run(bot, message):
            if channel['chat_id'] not in seen_ids:
                unique_channels.append(channel)
                seen_ids.add(channel['chat_id'])
-               
+
        for channel in unique_channels:
-           buttons.append([InlineKeyboardButton(f"{channel['title']}", callback_data=f"fwd_target_{channel['chat_id']}")])
-    
-       buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="close_btn")]) 
-       
+           buttons.append([InlineKeyboardButton(f"{channel['title']}", callback_data=f"fwd_target_{channel['chat_id']}_{bot_id}")])
+
+       buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="close_btn")])
+
        await message.reply_text("<b><u>Cʜᴏᴏꜱᴇ Tᴀʀɢᴇᴛ Cʜᴀᴛ</u></b>\n\nCʜᴏᴏꜱᴇ Yᴏᴜʀ Tᴀʀɢᴇᴛ Cʜᴀᴛ Fʀᴏᴍ Tʜᴇ Gɪᴠᴇɴ Bᴜᴛᴛᴏɴꜱ.", reply_markup=InlineKeyboardMarkup(buttons))
     else:
        return await message.reply_text("Please Set A To Channel In /settings Before Forwarding")
@@ -49,14 +66,17 @@ async def get_target_chat(bot, query):
     await query.answer()
     user_id = query.from_user.id
     toid = int(query.data.split('_')[2])
-    
+    bot_id = int(query.data.split('_')[3])
+
+    temp.FORWARD_BOT_ID = bot_id
+
     await query.message.delete()
-    
+
     try:
         fromid_msg = await bot.ask(query.message.chat.id, Translation.FROM_MSG, timeout=300)
     except asyncio.TimeoutError:
         return await bot.send_message(query.message.chat.id, Translation.CANCEL)
-        
+
     if fromid_msg.text and fromid_msg.text.startswith('/'):
         return await fromid_msg.reply(Translation.CANCEL)
 
@@ -75,7 +95,7 @@ async def get_target_chat(bot, query):
         chat_id = fromid_msg.forward_from_chat.username or fromid_msg.forward_from_chat.id
     else:
         return await fromid_msg.reply_text("Invalid Input!")
-    
+
     try:
         chat_info = await bot.get_chat(chat_id)
         title = chat_info.title
@@ -90,7 +110,7 @@ async def get_target_chat(bot, query):
         return await fromid_msg.reply('Invalid Link Specified.')
     except Exception as e:
         return await fromid_msg.reply(f'Errors - {e}')
-    
+
     await start_range_selection(bot, query, from_chat_id=chat_id, from_title=title, to_chat_id=toid, last_msg_id=last_msg_id, final_callback_prefix="fwd_final")
     await fromid_msg.delete()
 
@@ -100,12 +120,13 @@ async def show_fwd_confirmation(bot, session_id, forward_all=False):
     if not session: return
 
     user_id = session['user_id']
-    _bot = await db.get_bot(user_id)
+    bot_id = temp.FORWARD_BOT_ID
+    _bot = await db.get_bot(user_id, bot_id)
     channels = await db.get_user_channels(user_id)
     to_title = next((c['title'] for c in channels if c['chat_id'] == session['to_chat_id']), 'Unknown')
 
     forward_id = f"{user_id}-{session_id}"
-    
+
     if forward_all:
         start_id = 1
         end_id = session['last_msg_id']
@@ -126,25 +147,25 @@ async def show_fwd_confirmation(bot, session_id, forward_all=False):
     await bot.send_message(
         chat_id=session['chat_id'],
         text=Translation.DOUBLE_CHECK.format(
-            botname=_bot['name'], 
-            botuname=_bot['username'], 
-            from_chat=session['from_title'], 
-            to_chat=to_title, 
+            botname=_bot['name'],
+            botuname=_bot['username'],
+            from_chat=session['from_title'],
+            to_chat=to_title,
             message_range=message_range_text
         ),
         disable_web_page_preview=True,
         reply_markup=reply_markup
     )
-    
+
     # For "Forward All", start_id is None to signal get_chat_history usage
     final_start_id = start_id if not forward_all else None
     final_end_id = end_id if not forward_all else session['last_msg_id']
-    
+
     STS(forward_id).store(
-        From=session['from_chat_id'], 
-        to=session['to_chat_id'], 
-        start_id=final_start_id, 
-        end_id=final_end_id, 
+        From=session['from_chat_id'],
+        to=session['to_chat_id'],
+        start_id=final_start_id,
+        end_id=final_end_id,
         order=session['order']
     )
     temp.RANGE_SESSIONS.pop(session_id, None)
@@ -161,7 +182,7 @@ async def forward_all_messages(bot, query):
     session = temp.RANGE_SESSIONS.get(session_id)
     if not session or session['user_id'] != query.from_user.id:
         return await query.answer("This is not for you!", show_alert=True)
-    
+
     await query.message.delete()
     await show_fwd_confirmation(bot, session_id, forward_all=True)
 
@@ -171,7 +192,7 @@ async def edit_range_value(bot, query):
     session = temp.RANGE_SESSIONS.get(session_id)
     if not session or session['user_id'] != query.from_user.id:
         return await query.answer("This is not for you!", show_alert=True)
-    
+
     await query.answer()
     try:
         ask_msg = await bot.ask(query.message.chat.id, f"Please send the new **{value_type.upper()} ID**.", timeout=60)
@@ -203,9 +224,9 @@ async def confirm_range_selection(bot, query):
     session = temp.RANGE_SESSIONS.get(session_id)
     if not session or session['user_id'] != query.from_user.id:
         return await query.answer("This is not for you!", show_alert=True)
-    
+
     await query.message.delete()
-    
+
     if session['final_callback'] == 'fwd_final':
         await show_fwd_confirmation(bot, session_id, forward_all=False)
     elif session['final_callback'] == 'uneq_final':
