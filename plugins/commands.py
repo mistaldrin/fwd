@@ -28,25 +28,14 @@ async def start(client, message):
         if not await db.is_user_exist(user.id):
             await db.add_user(user.id, user.first_name)
     except Exception as e:
-        await message.reply(f"⚠️ An error occurred while checking or adding the user. {e}")
-        logger.error(f"Error in user registration: {e}")
+        print(f"Error in user registration: {e}")
 
     reply_markup = InlineKeyboardMarkup(main_buttons)
-  #  syd = await message.reply_sticker("CAACAgUAAxkBAAKlPWfvngykYJT-Q_3zzGyfqePnnQXXAAI3GAACF22BV0gDVTTEeAZaNgQ")
- #   await asyncio.sleep(2)
-  #  await syd.delete()
-    #await client.send_photo(chat_id=user.id, photo=random.choice(SYD))
     text=Translation.START_TXT.format(user.mention)
- #   await message.reply_text(
-     #   text=text,
-      #  reply_markup=reply_markup,
-  #      quote=True
-  #  )
     await message.reply_photo(
         photo=random.choice(SYD),
         caption=text,
         reply_markup=reply_markup
-      #  quote=True
     )
 
 
@@ -135,9 +124,8 @@ async def about(bot, query):
 @Client.on_callback_query(filters.regex(r'^status'))
 async def status(bot, query):
     users_count, bots_count = await db.total_users_bots_count()
-    total_channels = await db.total_channels()
     await query.message.edit_text(
-        text=Translation.STATUS_TXT.format(users_count, bots_count, temp.forwardings, total_channels, temp.BANNED_USERS ),
+        text=Translation.STATUS_TXT.format(users_count, bots_count, temp.forwardings),
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data='help')]]),
         parse_mode=enums.ParseMode.HTML,
         disable_web_page_preview=True,
