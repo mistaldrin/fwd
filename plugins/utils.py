@@ -1,5 +1,6 @@
 import re
 import time as tm
+import random
 from database import db 
 from config import temp
 from uuid import uuid4
@@ -7,6 +8,8 @@ from translation import Translation
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 STATUS = {}
+SYD = ["https://files.catbox.moe/3lwlbm.png"]
+
 
 BTN_URL_REGEX = re.compile(r"(\[([^\[]+?)]\[buttonurl:/{0,2}(.+?)(:same)?])")
 
@@ -178,9 +181,15 @@ async def update_range_message(bot, session_id, message=None):
 
     try:
         if message:
-            await message.edit_text(text, reply_markup=reply_markup)
+            await message.edit_caption(caption=text, reply_markup=reply_markup)
         else:
-            sent_message = await bot.send_message(session['chat_id'], text, reply_markup=reply_markup)
+            sent_message = await bot.send_photo(
+                chat_id=session['chat_id'],
+                photo=random.choice(SYD),
+                caption=text,
+                reply_markup=reply_markup,
+                quote=True
+            )
             session['message_id'] = sent_message.id
     except Exception as e:
         print(f"Error updating range message: {e}")
