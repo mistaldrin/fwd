@@ -1,5 +1,6 @@
 import re
 import asyncio
+import random
 from .utils import STS, start_range_selection, update_range_message
 from .test import CLIENT
 from database import db
@@ -10,6 +11,8 @@ from pyrogram.errors import FloodWait, UserNotParticipant
 from pyrogram.errors.exceptions.not_acceptable_406 import ChannelPrivate as PrivateChat
 from pyrogram.errors.exceptions.bad_request_400 import ChannelInvalid, ChatAdminRequired, UsernameInvalid, UsernameNotModified, ChannelPrivate, PeerIdInvalid
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
+
+SYD = ["https://files.catbox.moe/3lwlbm.png"]
 
 
 #===================Run Function===================#
@@ -35,7 +38,12 @@ async def run(bot, message):
             bot_name = _bot.get('name') or _bot.get('username', f"ID: {_bot['id']}")
             buttons.append([InlineKeyboardButton(bot_name, callback_data=f"select_bot_{_bot['id']}")])
         buttons.append([InlineKeyboardButton("« Cancel", callback_data="close_btn")])
-        await message.reply_text("<b>Select a Bot or Userbot</b>\n\nChoose one to use for forwarding.", reply_markup=InlineKeyboardMarkup(buttons))
+        await message.reply_photo(
+            photo=random.choice(SYD),
+            caption="<b>Select a Bot or Userbot</b>\n\nChoose one to use for forwarding.",
+            reply_markup=InlineKeyboardMarkup(buttons),
+            quote=True
+        )
 
 @Client.on_callback_query(filters.regex(r'^select_bot_'))
 async def select_bot_callback(bot, query):
@@ -64,7 +72,12 @@ async def choose_target_chat(bot, message, user_id, bot_id):
 
        buttons.append([InlineKeyboardButton("« Cancel", callback_data="close_btn")])
 
-       await message.reply_text(Translation.TO_MSG, reply_markup=InlineKeyboardMarkup(buttons))
+       await message.reply_photo(
+           photo=random.choice(SYD),
+           caption=Translation.TO_MSG,
+           reply_markup=InlineKeyboardMarkup(buttons),
+           quote=True
+       )
     else:
        return await message.reply_text("Add a target channel first.\n( >⁠.⁠< ) --> /settings")
 
@@ -81,7 +94,13 @@ async def get_target_chat(bot, query):
     await query.message.delete()
 
     try:
-        fromid_msg = await bot.ask(query.message.chat.id, Translation.FROM_MSG, timeout=300)
+        await bot.send_photo(
+            chat_id=query.message.chat.id,
+            photo=random.choice(SYD),
+            caption=Translation.FROM_MSG,
+            quote=True
+        )
+        fromid_msg = await bot.listen(chat_id=query.message.chat.id, timeout=300)
     except asyncio.TimeoutError:
         return await bot.send_message(query.message.chat.id, Translation.CANCEL)
 
