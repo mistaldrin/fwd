@@ -40,7 +40,8 @@ async def unequify_start(bot: Client, message: Message):
     user_id = message.from_user.id
     userbot_config = await db.get_bot(user_id)
     
-    if not userbot_config or userbot_config.get('is_bot'):
+    # Robust check for a valid userbot session
+    if not userbot_config or userbot_config.get('is_bot') or not userbot_config.get('session'):
         await message.reply_text("❌ **Userbot Not Found!**\n\nPlease add a Userbot session via the /settings menu to use this feature.")
         return
 
@@ -71,7 +72,8 @@ async def get_userbot_chat_list(bot: Client, message: Message):
     user_id = message.from_user.id
     userbot_config = await db.get_bot(user_id)
     
-    if not userbot_config or userbot_config.get('is_bot'):
+    # Robust check for a valid userbot session
+    if not userbot_config or userbot_config.get('is_bot') or not userbot_config.get('session'):
         await message.reply_text("❌ **Userbot Not Found!**\n\nPlease add a Userbot session via the /settings menu to use this feature.")
         return
 
@@ -82,8 +84,8 @@ async def get_userbot_chat_list(bot: Client, message: Message):
 
     try:
         session_string = userbot_config['session']
+        # Use the async with context manager to handle start/stop automatically
         async with CLIENT().client(session_string, user=True) as userbot:
-            userbot = await start_clone_bot(userbot)
             async for dialog in userbot.get_dialogs():
                 chat = dialog.chat
                 perms = "❌"
@@ -131,7 +133,7 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
 
     elif data == "select_userbot":
         userbot_config = await db.get_bot(user_id)
-        if not userbot_config or userbot_config.get('is_bot'):
+        if not userbot_config or not userbot_config.get('session'):
             return await query.message.edit("Userbot not found. Please add one in /settings.")
         
         await query.message.edit("`Fetching chats... This may take a moment.`")
@@ -142,7 +144,6 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
         try:
             session_string = userbot_config['session']
             async with CLIENT().client(session_string, user=True) as userbot:
-                userbot = await start_clone_bot(userbot)
                 async for dialog in userbot.get_dialogs():
                     chats[str(serial)] = dialog.chat
                     chats[str(dialog.chat.id)] = dialog.chat
@@ -203,7 +204,7 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
         return await status_message.edit_text("Error: Session expired or invalid.")
 
     userbot_config = await db.get_bot(user_id)
-    if not userbot_config or userbot_config.get('is_bot'):
+    if not userbot_config or not userbot_config.get('session'):
         return await status_message.edit_text("Error: Userbot not found.")
 
     target_channel = range_session['from_chat_id']
@@ -225,7 +226,6 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
     try:
         session_string = userbot_config['session']
         async with CLIENT().client(session_string, user=True) as userbot:
-            userbot = await start_clone_bot(userbot)
             chat = await userbot.get_chat(target_channel)
 
             await status_message.edit_text(f"`Accessing: {chat.title}`\n\n`Checking permissions...`")
