@@ -17,6 +17,12 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQ
 @Client.on_message(filters.private & filters.command(["fwd", "forward"]))
 async def run(bot, message):
     user_id = message.from_user.id
+    
+    # Explicitly check if the user is banned
+    ban_status = await db.get_ban_status(user_id)
+    if ban_status["is_banned"]:
+        return await message.reply_text(f"You are banned from using this bot.\n\nReason: {ban_status['ban_reason']}")
+
     bots = await db.get_bots(user_id)
     if not bots:
         return await message.reply("Yᴏᴜ Dɪᴅ Nᴏᴛ Aᴅᴅᴇᴅ Aɴʏ Bᴏᴛ Oʀ UꜱᴇʀBᴏᴛ. Pʟᴇᴀꜱᴇ Aᴅᴅ Oɴᴇ Uꜱɪɴɢ /settings !")
