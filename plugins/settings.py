@@ -1,4 +1,5 @@
 import asyncio
+import random
 from database import db
 from config import Config
 from translation import Translation
@@ -8,6 +9,8 @@ from .utils import parse_buttons
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 CLIENT = CLIENT()
+SYD = ["https://files.catbox.moe/3lwlbm.png"]
+
 
 @Client.on_message(filters.private & filters.command(['settings']))
 async def settings(client, message):
@@ -19,8 +22,9 @@ async def settings(client, message):
         return await message.reply_text(f"Access denied.\n\nReason: {ban_status['ban_reason']}")
 
     text="<b>֎ Settings ֎</b>\n\nManage personal configurations."
-    await message.reply_text(
-        text=text,
+    await message.reply_photo(
+        photo=random.choice(SYD),
+        caption=text,
         reply_markup=main_buttons(),
         quote=True
     )
