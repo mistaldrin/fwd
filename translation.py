@@ -13,21 +13,21 @@ class Translation(object):
 
 <b><u>≍ Aᴠᴀɪʟᴀʙʟᴇ Cᴏᴍᴍᴀɴᴅꜱ :</u></b>
 ⏣ __/start - Cʜᴇᴄᴋ I'ᴍ Aʟɪᴠᴇ__ 
-⏣ __/forward - Fᴏʀᴡᴀʀᴅ Mᴇꜱꜱᴀɢᴇꜱ__
-⏣ __/unequify - Dᴇʟᴇᴛᴇ Dᴜᴩʟɪᴄᴀᴛᴇ Mᴇꜱꜱᴀɢᴇꜱ Iɴ Cʜᴀɴɴᴇʟꜱ__
+⏣ __/forward - Fᴏʀᴡᴀʀᴅ Mᴇꜱꜱᴀɢᴇꜱ Iɴ A Rᴀɴɢᴇ__
+⏣ __/unequify - Dᴇʟᴇᴛᴇ Dᴜᴩʟɪᴄᴀᴛᴇ Mᴇꜱꜱᴀɢᴇꜱ Iɴ A Rᴀɴɢᴇ__
+⏣ __/ubclist - Lɪꜱᴛ Cʜᴀᴛꜱ Fʀᴏᴍ Yᴏᴜʀ Usᴇʀʙᴏᴛ__
 ⏣ __/settings - Cᴏɴꜰɪɢᴜʀᴇ Yᴏᴜʀ Sᴇᴛᴛɪɴɢꜱ__
 ⏣ __/reset - Rᴇꜱᴇᴛ Yᴏᴜʀ Sᴇᴛᴛɪɴɢꜱ__
 ⏣ __/forwardelay - Sᴇᴛ ᴀ ᴄᴜꜱᴛᴏᴍ ꜰᴏʀᴡᴀʀᴅɪɴɢ ᴅᴇʟᴀʏ__
 
 <b><u>≬≬ Fᴇᴀᴛᴜʀᴇꜱ :</b></u>
-► __Fᴏʀᴡᴀʀᴅ Mᴇꜱꜱᴀɢᴇ Fʀᴏᴍ Pᴜʙʟɪᴄ Cʜᴀɴɴᴇʟ To Yᴏᴜʀ Cʜᴀɴɴᴇʟ Wɪᴛʜᴏᴜᴛ Aᴅᴍɪɴ Peᴇʀᴍɪꜱꜱɪᴏɴ. Iꜰ Tʜᴇ Cʜᴀɴɴᴇʟ Iꜱ Pʀɪᴠᴀᴛᴇ Nᴇᴇᴅ Aᴅᴍɪɴ Pᴇʀᴍɪꜱꜱɪᴏɴ, Bᴇᴛᴇʀ Tᴏ Uꜱᴇ UꜱᴇʀBᴏᴛ__
-► __Forward Message Fʀᴏᴍ Private Cʜᴀɴɴᴇʟ To Yᴏᴜʀ Cʜᴀɴɴᴇʟ Bʏ Uꜱɪɴɢ UꜱᴇʀBᴏᴛ (Uꜱᴇʀ Mᴜꜱᴛ Bᴇ Mᴇᴍʙᴇʀ Iɴ Tʜᴇʀᴇ)__
-► __Cᴜꜱᴛᴏᴍ Cᴀᴩᴛɪᴏɴ__
-► __Cᴜꜱᴛᴏᴍ Bᴜᴛᴛᴏɴ__
-► __Sᴜᴩᴩᴏʀᴛ Rᴇꜱᴛʀɪᴄᴛᴇᴅ Cʜᴀᴛꜱ__
+► __Sᴇʟᴇᴄᴛ A Sᴘᴇᴄɪғɪᴄ Rᴀɴɢᴇ Oꜰ Mᴇssᴀɢᴇs Tᴏ Fᴏʀᴡᴀʀᴅ Oʀ Dᴇᴅᴜᴘʟɪᴄᴀᴛᴇ__
+► __Iɴᴛᴇʀᴀᴄᴛɪᴠᴇʟʏ Sᴇʟᴇᴄᴛ Cʜᴀᴛs Fᴏʀ Dᴇᴅᴜᴘʟɪᴄᴀᴛɪᴏɴ__
+► __Fᴏʀᴡᴀʀᴅ Mᴇꜱꜱᴀɢᴇ Fʀᴏᴍ Pᴜʙʟɪᴄ Cʜᴀɴɴᴇʟ To Yᴏᴜʀ Cʜᴀɴɴᴇʟ Wɪᴛʜᴏᴜᴛ Aᴅᴍɪɴ Peᴇʀᴍɪꜱꜱɪᴏɴ__
+► __Forward Message Fʀᴏᴍ Private Cʜᴀɴɴᴇʟ To Yᴏᴜʀ Cʜᴀɴɴᴇʟ Bʏ Uꜱɪɴɢ UꜱᴇʀBᴏᴛ__
+► __Cᴜꜱᴛᴏм Cᴀᴩᴛɪᴏɴ & Bᴜᴛᴛᴏɴ__
+► __Sᴜᴩᴩᴏʀᴛ Rᴇꜱᴛʀɪᴄᴛᴇḍ Cʜᴀᴛꜱ__
 ► __Sᴋɪᴩ Dᴜᴩʟɪᴄᴀᴛᴇ Mᴇꜱꜱᴀɢᴇꜱ__
-► __Fɪʟᴛᴇʀ Tʏᴩᴇ Oꜰ Mᴇꜱꜱᴀɢᴇꜱ__
-► __Sᴋɪᴩ Mᴇꜱꜱᴀɢᴇꜱ Bᴀꜱᴇᴅ Oɴ Exᴛᴇɴꜱɪᴏɴꜱ & Kᴇʏᴡᴏʀᴅ & Sɪᴢᴇ__
 """
   
   HOW_USE_TXT = """<b><u>⚠️ Bᴇꜰᴏʀᴇ Fᴏʀᴡᴀʀᴅ :</b></u>
@@ -54,18 +54,30 @@ class Translation(object):
   
   FROM_MSG = "<b><u>Sᴇᴛ Sᴏᴜʀᴄᴇ Cʜᴀᴛ</></>\n\nForward The Last Mᴇꜱꜱᴀɢᴇ Or Last Mᴇꜱꜱᴀɢᴇ Lɪɴᴋ Oꜰ Sᴏᴜʀᴄᴇ Cʜᴀᴛ.\n/cancel - Tᴏ Cᴀɴᴄᴇʟ Tʜɪꜱ Pʀᴏᴄᴇꜱꜱ"
   TO_MSG = "<b><u>Cʜᴏᴏꜱᴇ Tᴀʀɢᴇᴛ Cʜᴀᴛ</u></b>\n\nCʜᴏᴏꜱᴇ Yᴏᴜʀ Tᴀʀɢᴇᴛ Cʜᴀᴛ Fʀᴏᴍ Tʜᴇ Gɪᴠᴇɴ Bᴜᴛᴛᴏɴꜱ.\n/cancel - Tᴏ Cᴀɴᴄᴇʟ Tʜɪꜱ Pʀᴏᴄᴇꜱꜱ"
-  SKIP_MSG = "<b><u>Sᴇᴛ Mᴇꜱꜱᴀɢᴇ Sᴋɪᴩᴩɪɴɢ Nᴜᴍʙᴇʀ</u></b>\n\nSᴋɪᴩ Tʜᴇ Mᴇꜱꜱᴀɢᴇ Aꜱ Mᴜᴄʜ Aꜱ Yᴏᴜ Eɴᴛᴇʀ Tʜᴇ Nᴜᴍʙᴇʀ Aɴᴅ Tʜᴇ Rᴇꜱᴛ Oꜰ Tʜᴇ Mᴇꜱꜱᴀɢᴇ Wɪʟʟ Bᴇ Fᴏʀᴡᴀʀᴅ\nDᴇꜰᴀᴜʟᴛ Sᴋɪᴩ Nᴜᴍʙᴇʀ = <code>0</code>\n<code>eg: Iꜰ Yᴏᴜ Eɴᴛᴇʀ 0, 0 Mᴇꜱꜱᴀɢᴇ Sᴋɪᴩᴩᴇᴅ\nYᴏᴜ Eɴᴛᴇʀ 5 = 5 Mᴇꜱꜱᴀɢᴇ Sᴋɪᴩᴩᴇᴅ</code>\nSᴇɴᴅ Zᴇʀᴏ(0) Tᴏ Aᴠᴏɪᴅ Sᴋɪᴩᴩɪɴɢ\n/cancel - Tᴏ Cᴀɴᴄᴇʟ Tʜɪꜱ Pʀᴏᴄᴇꜱꜱ"
+  
+  RANGE_SELECTION_TXT = """<b><u>SELECT MESSAGE RANGE</u></b>
+
+You can either forward all messages by default or specify a custom range using the buttons below.
+
+<i>Note: Forwarding all messages from a very large channel may take a significant amount of time.</i>"""
+
+  UNEQUIFY_START_TXT = """<b><u>Advanced Deduplicator</u></b>
+
+How would you like to select the target channel?
+
+**Usage:** `/unequify [channel_username or chat_id]` for manual input."""
+  
   CANCEL = "<b> Pʀᴏᴄᴇꜱꜱ Cᴀɴᴄᴇʟʟᴇᴅ Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ! </b>"
   BOT_DETAILS = "<b><u>📄 Bᴏᴛ Dᴇᴛᴀɪʟꜱ</u></b>\n\n<b>➣ Nᴀᴍᴇ :</b> <code>{}</code>\n<b>➣ Bᴏᴛ ID :</b> <code>{}</code>\n<b>➣ Uꜱᴇʀɴᴀᴍᴇ :</b> @{}"
   USER_DETAILS = "<b><u>📄 UꜱᴇʀBᴏᴛ Dᴇᴛᴀɪʟꜱ</u></b>\n\n<b>➣ Nᴀᴍᴇ :</b> <code>{}</code>\n<b>➣ Uꜱᴇʀ ID :</b> <code>{}</code>\n<b>➣ Uꜱᴇʀɴᴀᴍᴇ :</b> @{}"  
          
   TEXT = """<b><u>Fᴏʀᴡᴀʀᴅ Sᴛᴀᴛᴜꜱ</u></b>
   
+<b>🎯 Total In Range:</b> <code>{total}</code>
 <b>🕵 Fᴇᴛᴄʜᴇᴅ Mᴇꜱꜱᴀɢᴇ :</b> <code>{}</code>
 <b>✅ Sᴜᴄᴄᴇꜱꜰᴜʟʟʏ Fᴏʀᴡᴀʀᴅ :</b> <code>{}</code>
 <b>👥 Dᴜʙʟɪᴄᴀᴛᴇ Mᴇꜱꜱᴀɢᴇ :</b> <code>{}</code>
 <b>🗑 Dᴇʟᴇᴛᴇᴅ Mᴇꜱꜱᴀɢᴇ :</b> <code>{}</code>
-<b>🪆 Sᴋɪᴩᴩᴇᴅ Mᴇꜱꜱᴀɢᴇ :</b> <code>{}</code>
 <b>🔁 Fɪʟᴛᴇʀᴇᴅ Mᴇꜱꜱᴀɢᴇ :</b> <code>{}</code>
 <b>📊 Cᴜʀʀᴇɴᴛ Sᴛᴀᴛᴜꜱ :</b> <code>{}</code>
 <b>🔥 Pᴇʀᴄᴇɴᴛᴀɢᴇ :</b> <code>{}</code> %
@@ -73,22 +85,10 @@ class Translation(object):
 {}
 """
 
-  TEXT1 = """<b><u>Fᴏʀᴡᴀʀᴅ Sᴛᴀᴛᴜꜱ</u></b>
-
-<b>🕵 Fᴇᴛᴄʜᴇᴅ Mᴇꜱꜱᴀɢᴇ :</b> <code>{}</code>
-<b>✅ Sᴜᴄᴄᴇꜱꜰᴜʟʟʏ Fᴏʀᴡᴀʀᴅ :</b> <code>{}</code>
-<b>👥 Dᴜʙʟɪᴄᴀᴛᴇ Mᴇꜱꜱᴀɢᴇ :</b> <code>{}</code>
-<b>🗑 Dᴇʟᴇᴛᴇᴅ Mᴇꜱꜱᴀɢᴇ :</b> <code>{}</code>
-<b>🪆 Sᴋɪᴩᴩᴇᴅ Mᴇꜱꜱᴀɢᴇ :</b> <code>{}</code>
-<b>📊 Sᴛᴀᴛꜱ :</b> <code>{}</code>
-<b>⏳ Pʀᴏɢʀᴇꜱꜱ :</b> <code>{}</code>
-<b>⏰ Eᴛᴀ :</b> <code>{}</code>
-{}"""
-
   DUPLICATE_TEXT = """<b><u>UɴᴇQᴜɪꜰʏ Sᴛᴀᴛᴜꜱ</u></b>
 
-<b>🕵 Fᴇᴛᴄʜᴇᴅ Fɪʟᴇꜱ :</b> <code>{}</code>
-
+<b>🎯 Total In Range:</b> <code>{total}</code>
+<b>🕵 Mᴇssᴀɢᴇs Sᴄᴀɴɴᴇᴅ :</b> <code>{}</code>
 <b>👥 Dᴜʙʟɪᴄᴀᴛᴇ Dᴇʟᴇᴛᴇᴅ :</b> <code>{}</code>
 
 {}
@@ -98,9 +98,9 @@ class Translation(object):
 Bᴇꜰᴏʀ Fᴏʀᴡᴀʀᴅɪɴɢ Tʜᴇ Mᴇꜱꜱᴀɢᴇꜱ Cʟɪᴄᴋ Tʜᴇ Yᴇꜱ Bᴜᴛᴛᴏɴ Oɴʟʏ Aꜰᴛᴇʀ Cʜᴇᴄᴋɪɴɢ Tʜᴇ Fᴏʟʟᴏᴡɪɴɢ
 
 <b>★ Yᴏᴜʀ Bᴏᴛ :</b> [{botname}](t.me/{botuname})
-<b>★ Fʀᴏᴍ Cʜᴀɴɴᴇʟ :</b> <code>{from_chat}<>
+<b>★ Fʀᴏᴍ Cʜᴀɴɴᴇʟ :</b> <code>{from_chat}</code>
 <b>★ Tᴏ Cʜᴀɴɴᴇʟ :</b> <code>{to_chat}</code>
-<b>★ Sᴋɪᴩ Mᴇꜱꜱᴀɢᴇꜱ :</b> <code>{skip}</code>
+<b>★ Mᴇssᴀɢᴇ Rᴀɴɢᴇ :</b> <code>{message_range}</code>
 
 <i>° [{botname}](t.me/{botuname}) Mᴜꜱᴛ Bᴇ Aᴅᴍɪɴ Iɴ <b>Tᴀʀɢᴇᴛ Cʜᴀᴛ</b></i> (<code>{to_chat}</code>)
 <i>° Iꜰ Tʜᴇ <b>Sᴏᴜʀᴄᴇ Cʜᴀᴛ</b> Iꜱ Pʀɪᴠᴀᴛᴇ Yᴏᴜʀ Userbot Mᴜꜱᴛ Bᴇ Mᴇᴍʙᴇʀ Or Yᴏᴜʀ Bᴏᴛ Mᴜꜱᴛ Bᴇ Aᴅᴍɪɴ Iɴ Tʜᴇʀᴇ Aʟꜱᴏ</i>
@@ -116,3 +116,5 @@ Use this command to set a custom delay (in seconds) between forwarded messages t
 <b>Example:</b> <code>/forwardelay 2</code> (sets a two-second delay)
 
 The default delay is 1 second."""
+
+}
