@@ -8,6 +8,7 @@
 import asyncio
 import logging 
 import logging.config
+import sys
 from database import db 
 from config import Config  
 from aiohttp import web
@@ -38,7 +39,13 @@ class Bot(Client):
         self.log = logging
 
     async def start(self):
-        await super().start()
+        try:
+            await super().start()
+        except FloodWait as e:
+            self.log.warning(f"Telegram is asking to wait for {e.value} seconds. Exiting now.")
+            # Exit gracefully to allow the deploy service to handle restarts correctly.
+            sys.exit(1)
+            
         me = await self.get_me()
         logging.info(f"{me.first_name} with for pyrogram v{__version__} (Layer {layer}) started on @{me.username}.")
         self.id = me.id
