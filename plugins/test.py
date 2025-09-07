@@ -19,7 +19,6 @@ from typing import Union, Optional, AsyncGenerator
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-BTN_URL_REGEX = re.compile(r"(\[([^\[]+?)]\[buttonurl:/{0,2}(.+?)(:same)?])")
 BOT_TOKEN_TEXT = "1) Cʀᴇᴀᴛᴇ A Bᴏᴛ Uꜱɪɴɢ @BotFather [ꜱᴇɴᴅ <code>/newbot</code> ᴛᴏ ʙᴏᴛ ꜰᴀᴛʜᴇʀ ᴀɴᴅ ᴛʜᴇ ɴᴀᴍᴇ ᴀɴᴅ ᴜꜱᴇʀɴᴀᴍᴇ ʀᴇꜱᴩᴇᴄᴛɪᴠᴇʟʏ]\n\n2) Tʜᴇɴ Yᴏᴜ Wɪʟʟ Gᴇᴛ A Mᴇꜱꜱᴀɢᴇ Wɪᴛʜ Bᴏᴛ Tᴏᴋᴇɴ\n\n3) Fᴏʀᴡᴀʀᴅ Tʜᴀᴛ Mᴇꜱꜱᴀɢᴇ Tᴏ Mᴇ \n\nIꜰ Yᴏᴜ Hᴀᴠᴇ A Bᴏᴛ Aʟʀᴇᴀᴅʏ, Yᴏᴜ Cᴀɴ Fᴏʀᴡᴀʀᴅ Iᴛꜱ Tᴏᴋᴇɴ Fʀᴏᴍ API Bᴏᴛ Tᴏᴋᴇɴ."
 SESSION_STRING_SIZE = 351
 
@@ -140,25 +139,3 @@ async def update_configs(user_id, key, value):
   else: 
      current['filters'][key] = value
   await db.update_configs(user_id, current)
-    
-def parse_buttons(text, markup=True):
-    buttons = []
-    for match in BTN_URL_REGEX.finditer(text):
-        n_escapes = 0
-        to_check = match.start(1) - 1
-        while to_check > 0 and text[to_check] == "\\":
-            n_escapes += 1
-            to_check -= 1
-
-        if n_escapes % 2 == 0:
-            if bool(match.group(4)) and buttons:
-                buttons[-1].append(InlineKeyboardButton(
-                    text=match.group(2),
-                    url=match.group(3).replace(" ", "")))
-            else:
-                buttons.append([InlineKeyboardButton(
-                    text=match.group(2),
-                    url=match.group(3).replace(" ", ""))])
-    if markup and buttons:
-       buttons = InlineKeyboardMarkup(buttons)
-    return buttons if buttons else None
