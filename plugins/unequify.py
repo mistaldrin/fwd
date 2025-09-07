@@ -42,12 +42,12 @@ async def unequify_start(bot: Client, message: Message):
     # Explicitly check if the user is banned
     ban_status = await db.get_ban_status(user_id)
     if ban_status["is_banned"]:
-        return await message.reply_text(f"You are banned from using this bot.\n\nReason: {ban_status['ban_reason']}")
+        return await message.reply_text(f"Access denied.\n\nReason: {ban_status['ban_reason']}")
 
     userbots = [b for b in await db.get_bots(user_id) if not b.get('is_bot')]
 
     if not userbots:
-        await message.reply_text("❌ **Userbot Not Found!**\n\nPlease add a Userbot session via the /settings menu to use this feature.")
+        await message.reply_text("Add a userbot to proceed.\n( >⁠.⁠< ) --> /settings")
         return
 
     if len(userbots) > 1:
@@ -55,7 +55,7 @@ async def unequify_start(bot: Client, message: Message):
         for ub in userbots:
             buttons.append([InlineKeyboardButton(ub['name'], callback_data=f"uneq_select_userbot_{ub['id']}")])
         buttons.append([InlineKeyboardButton("« Cancel", callback_data="close_btn")])
-        await message.reply_text("<b>Select a Userbot</b>\n\nChoose the userbot you want to use for deduplication.", reply_markup=InlineKeyboardMarkup(buttons))
+        await message.reply_text("<b>Select a Userbot</b>\n\nChoose one to use for deduplication.", reply_markup=InlineKeyboardMarkup(buttons))
         return
     
     await unequify_continue(bot, message, user_id, userbots[0]['id'])
@@ -87,7 +87,7 @@ async def unequify_continue(bot: Client, message: Message, user_id: int, userbot
         # Use the selected userbot to get chat info, not the main bot
         userbot_config = await db.get_bot(user_id, userbot_id)
         if not userbot_config:
-            return await message.reply("Could not find the selected userbot's configuration.")
+            return await message.reply("Selected userbot configuration not found.")
 
         async with CLIENT().client(userbot_config) as temp_client:
             chat = await temp_client.get_chat(target_channel_input)
@@ -98,7 +98,7 @@ async def unequify_continue(bot: Client, message: Message, user_id: int, userbot
             await start_range_selection(bot, message, from_chat_id=chat.id, from_title=chat.title, to_chat_id=None, last_msg_id=last_msg_id, final_callback_prefix="uneq_final")
 
     except (UsernameInvalid, PeerIdInvalid, ChannelInvalid) as e:
-        await message.reply(f"Could not find the chat: `{e}`. Please check the username/ID.")
+        await message.reply(f"Could not find the chat: `{e}`.")
     except Exception as e:
         await message.reply(f"An error occurred: {e}")
 
@@ -110,12 +110,12 @@ async def get_userbot_chat_list(bot: Client, message: Message):
     # Explicitly check if the user is banned
     ban_status = await db.get_ban_status(user_id)
     if ban_status["is_banned"]:
-        return await message.reply_text(f"You are banned from using this bot.\n\nReason: {ban_status['ban_reason']}")
+        return await message.reply_text(f"Access denied.\n\nReason: {ban_status['ban_reason']}")
 
     userbots = [b for b in await db.get_bots(user_id) if not b.get('is_bot')]
     
     if not userbots:
-        await message.reply_text("❌ **Userbot Not Found!**\n\nPlease add a Userbot session via the /settings menu to use this feature.")
+        await message.reply_text("Add a userbot to proceed.\n( >⁠.⁠< ) --> /settings")
         return
 
     if len(userbots) > 1:
@@ -123,7 +123,7 @@ async def get_userbot_chat_list(bot: Client, message: Message):
         for ub in userbots:
             buttons.append([InlineKeyboardButton(ub['name'], callback_data=f"ubclist_select_{ub['id']}")])
         buttons.append([InlineKeyboardButton("« Cancel", callback_data="close_btn")])
-        await message.reply_text("<b>Select a Userbot</b>\n\nChoose the userbot whose chat list you want to see.", reply_markup=InlineKeyboardMarkup(buttons))
+        await message.reply_text("<b>Select a Userbot</b>\n\nChoose one to see the chat list.", reply_markup=InlineKeyboardMarkup(buttons))
         return
         
     await list_userbot_chats(bot, message, user_id, userbots[0]['id'])
@@ -140,8 +140,7 @@ async def list_userbot_chats(bot: Client, message: Message, user_id: int, userbo
 
     sts = await message.reply("`⏳ Fetching chat list...`")
 
-    chat_list_text = "<b>❖ Userbot Chat List ❖</b>\n\n"
-    chat_list_text += "✓ - Indicates you have admin rights to delete messages.\n\n"
+    chat_list_text = "<b>❖ Userbot Chat List ❖</b>\n\n✓ - Indicates delete permissions.\n\n"
 
     try:
         session_string = userbot_config['session']
@@ -163,7 +162,7 @@ async def list_userbot_chats(bot: Client, message: Message, user_id: int, userbo
         if len(chat_list_text) > 4096:
             with io.StringIO(chat_list_text) as file:
                 file.name = "userbot_chats.txt"
-                await message.reply_document(file, caption="Here is the list of chats accessible by your userbot.")
+                await message.reply_document(file, caption="A list of all chats accessible by the userbot.")
         else:
             await message.reply_text(chat_list_text, parse_mode=ParseMode.HTML)
         await sts.delete()
@@ -180,7 +179,7 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
     if data == "manual":
         await query.answer()
         try:
-            ask_msg = await bot.ask(query.message.chat.id, "Please send the channel username or ID.", timeout=60)
+            ask_msg = await bot.ask(query.message.chat.id, "Send the channel username or ID.", timeout=60)
             target = ask_msg.text
             await query.message.delete()
             # Re-call the main function with the provided target
@@ -196,24 +195,32 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
         # Get the userbot_id from the user-specific session
         userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
         if not userbot_id:
-            return await query.message.edit("Error: Could not determine which userbot to use. Please start over.")
+            return await query.message.edit("Error: Bot selection lost. Please start over.")
 
         userbot_config = await db.get_bot(user_id, userbot_id)
         if not userbot_config or not userbot_config.get('session'):
-            return await query.message.edit("Userbot not found. Please add one in /settings.")
+            return await query.message.edit("Userbot not found. Add one in /settings.")
 
         await query.message.edit("`⏳ Fetching chats...`")
 
         chats = {}
         serial = 1
-        text = "Reply with the number or Chat ID of the target channel.\n\n"
+        text = "Reply with the number or Chat ID of the target channel.\n\n✓ - Indicates delete permissions.\n\n"
         try:
             session_string = userbot_config['session']
             async with CLIENT().client(session_string, user=True) as userbot:
                 async for dialog in userbot.get_dialogs():
+                    perms = "-"
+                    try:
+                        me = await userbot.get_chat_member(dialog.chat.id, "me")
+                        if me.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER] and (me.privileges and me.privileges.can_delete_messages):
+                           perms = "✓"
+                    except Exception:
+                        pass
+                        
                     chats[str(serial)] = dialog.chat
                     chats[str(dialog.chat.id)] = dialog.chat
-                    text += f"<b>{serial}.</b> {dialog.chat.title} (<code>{dialog.chat.id}</code>)\n"
+                    text += f"<b>{serial}. {perms}</b> {dialog.chat.title} (<code>{dialog.chat.id}</code>)\n"
                     serial += 1
 
             await query.message.edit(text, parse_mode=ParseMode.HTML)
@@ -243,7 +250,7 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
         _, session_id = data.split("_", 1)
         keyboard = create_selection_keyboard(DEFAULT_STATE, session_id)
         await query.message.edit_text(
-            "<b>Select Message Types</b>\n\nPlease select the types of messages you wish to find duplicates of.",
+            "<b>Select Message Types</b>\n\nSelect the types of messages to find duplicates of.",
             reply_markup=keyboard
         )
 
@@ -276,7 +283,7 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
     # Get userbot_id from the user-specific session
     userbot_id = temp.UNEQUIFY_USERBOT_ID.pop(user_id, None)
     if not userbot_id:
-        return await status_message.edit_text("Error: Could not determine which userbot to use. Please start over.")
+        return await status_message.edit_text("Error: Bot selection lost. Please start over.")
 
     userbot_config = await db.get_bot(user_id, userbot_id)
     if not userbot_config or not userbot_config.get('session'):
@@ -310,7 +317,7 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
             can_delete = member.privileges and member.privileges.can_delete_messages if is_admin else False
 
             if not (is_admin and can_delete):
-                return await status_message.edit_text(f"❌ **Permission Denied in '{chat.title}'!** You must be an admin with delete rights.")
+                return await status_message.edit_text(f"❌ **Permission Denied in '{chat.title}'!** Admin rights with delete permission are required.")
 
             await status_message.edit_text(f"✓ **Permissions Confirmed!**\n\n`Starting scan...`")
 
