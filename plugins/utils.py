@@ -121,14 +121,14 @@ def get_readable_time(seconds: int) -> str:
     result += f"{seconds}s"
     return result
 
-async def start_range_selection(bot, query, from_chat_id, from_title, to_chat_id, last_msg_id, final_callback_prefix):
+async def start_range_selection(bot, user_id, chat_id, from_chat_id, from_title, to_chat_id, last_msg_id, final_callback_prefix):
     """
     Initiates an interactive message range selection process.
     """
     session_id = str(uuid4())
     temp.RANGE_SESSIONS[session_id] = {
-        'user_id': query.from_user.id,
-        'chat_id': query.message.chat.id,
+        'user_id': user_id,
+        'chat_id': chat_id,
         'from_chat_id': from_chat_id,
         'from_title': from_title,
         'to_chat_id': to_chat_id,
@@ -187,8 +187,7 @@ async def update_range_message(bot, session_id, message=None):
                 chat_id=session['chat_id'],
                 photo=random.choice(SYD),
                 caption=text,
-                reply_markup=reply_markup,
-                quote=True
+                reply_markup=reply_markup
             )
             session['message_id'] = sent_message.id
     except Exception as e:
