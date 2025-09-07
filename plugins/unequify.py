@@ -7,7 +7,7 @@ from pyrogram.enums import ChatMemberStatus
 from pyrogram.errors import FloodWait, ChannelInvalid, UsernameNotOccupied, UsernameInvalid, PeerIdInvalid, UserAlreadyParticipant
 
 from .test import CLIENT
-from .utils import start_range_selection, force_subscribe
+from .utils import start_range_selection
 from translation import Translation
 from config import temp
 from database import db
@@ -33,7 +33,6 @@ def create_selection_keyboard(selection_state: str, session_id: str) -> InlineKe
     return InlineKeyboardMarkup(buttons)
 
 @Client.on_message(filters.command("unequify") & filters.private)
-@force_subscribe
 async def unequify_start(bot: Client, message: Message):
     """
     Initial entry point for the /unequify command.
@@ -99,7 +98,6 @@ async def unequify_continue(bot: Client, message: Message, userbot_id: int):
 
 
 @Client.on_message(filters.command("ubclist") & filters.private)
-@force_subscribe
 async def get_userbot_chat_list(bot: Client, message: Message):
     user_id = message.from_user.id
     userbots = [b for b in await db.get_bots(user_id) if not b.get('is_bot')]
@@ -245,7 +243,7 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
         state_list[index] = '1' if state_list[index] == '0' else '0'
         new__state = "".join(state_list)
 
-        new_keyboard = create_selection_keyboard(new_state, session_id)
+        new_keyboard = create_selection_keyboard(new__state, session_id)
         await query.message.edit_reply_markup(new_keyboard)
         await query.answer()
 
