@@ -4,6 +4,7 @@ import sys
 import typing
 import asyncio 
 import logging 
+from uuid import uuid4
 from database import db 
 from config import Config, temp
 from pyrogram import Client, filters
@@ -24,7 +25,8 @@ SESSION_STRING_SIZE = 351
 
 
 async def start_clone_bot(FwdBot):
-   await FwdBot.start()
+   if not FwdBot.is_connected:
+      await FwdBot.start()
    return FwdBot
 
 class CLIENT: 
@@ -33,13 +35,16 @@ class CLIENT:
      self.api_hash = Config.API_HASH
     
   def client(self, data, user=None):
-     if user == None and data.get('is_bot') == False:
-        return Client("USERBOT", self.api_id, self.api_hash, session_string=data.get('session'))
-     elif user == True:
-        return Client("USERBOT", self.api_id, self.api_hash, session_string=data)
-     elif user != False:
-        data = data.get('token')
-     return Client("BOT", self.api_id, self.api_hash, bot_token=data, in_memory=True)
+     # Give each client a unique name to avoid conflicts
+     client_name = str(uuid4())
+     
+     if user is None and not data.get('is_bot'):
+        return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, session_string=data.get('session'))
+     elif user is True:
+        return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, session_string=data)
+     else:
+        token = data.get('token') if isinstance(data, dict) else data
+        return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, bot_token=token, in_memory=True)
   
   async def add_bot(self, bot, message):
      user_id = int(message.from_user.id)
@@ -55,10 +60,11 @@ class CLIENT:
      if not bot_token:
        return await msg.reply_text("Tʜᴇʀᴇ Iꜱ No Bᴏᴛ Tᴏᴋᴇɴ Iɴ Tʜᴀᴛ Mᴇꜱꜱᴀɢᴇ !Tʀʏ Aɢᴀɪɴ Pʟᴇᴀꜱᴇ !")
      try:
-       _client = await start_clone_bot(self.client(bot_token, False))
+       async with self.client(bot_token, False) as _client:
+          _bot = await _client.get_me()
      except Exception as e:
-       await msg.reply_text(f"Bot Error :</b> `{e}` /nFᴏʀᴡᴀʀᴅ ɪᴛ ᴛᴏ @Syd_Xyz Iꜰ ʏᴏᴜ ɴᴇᴇᴅ HELP !")
-     _bot = _client.me
+       return await msg.reply_text(f"Bot Error :</b> `{e}` /nFᴏʀᴡᴀʀᴅ ɪᴛ ᴛᴏ @Syd_Xyz Iꜰ ʏᴏᴜ ɴᴇᴇᴅ HELP !")
+     
      details = {
        'id': _bot.id,
        'is_bot': True,
@@ -80,10 +86,11 @@ class CLIENT:
      elif len(msg.text) < SESSION_STRING_SIZE:
         return await msg.reply('Iɴᴠᴀʟɪᴅ Sᴇꜱꜱɪᴏɴ Sᴛʀɪɴɢ !')
      try:
-       client = await start_clone_bot(self.client(msg.text, True))
+       async with self.client(msg.text, True) as client:
+          user = await client.get_me()
      except Exception as e:
-       await msg.reply_text(f"<b>User Bot Error :</b> `{e}` /nFᴏʀᴡᴀʀᴅ ɪᴛ ᴛᴏ @Syd_Xyz Iꜰ ʏᴏᴜ ɴᴇᴇᴅ HELP !")
-     user = client.me
+       return await msg.reply_text(f"<b>User Bot Error :</b> `{e}` /nFᴏʀᴡᴀʀᴅ ɪᴛ ᴛᴏ @Syd_Xyz Iꜰ ʏᴏᴜ ɴᴇᴇᴅ HELP !")
+     
      details = {
        'id': user.id,
        'is_bot': False,
