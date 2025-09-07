@@ -2,118 +2,120 @@ import os
 from config import Config
 
 class Translation(object):
-  START_TXT = """wassup {}
+  START_TXT = """Hello there, {}.
 
-<i>Personal Past Forwarding Bot</i>
+A personal assistant for message forwarding.
 
-<b>Click '⊛ Hᴇʟᴩ ⊛' for... Help duh...</b>"""
+Select 'Help' for a list of commands.
+(o･ω･o)"""
 
 
-  HELP_TXT = """<b><u>⋈ Hᴇʟᴩ</b></u>
+  HELP_TXT = """<b>❖ Help Menu ❖</b>
 
-<b><u>≍ Aᴠᴀɪʟᴀʙʟᴇ Cᴏᴍᴍᴀɴᴅꜱ :</u></b>
-⏣ __/start - Cʜᴇᴄᴋ I'ᴍ Aʟɪᴠᴇ__ 
-⏣ __/forward - Fᴏʀᴡᴀʀᴅ Mᴇꜱꜱᴀɢᴇꜱ Iɴ A Rᴀɴɢᴇ__
-⏣ __/unequify - Dᴇʟᴇᴛᴇ Dᴜᴩʟɪᴄᴀᴛᴇ Mᴇꜱꜱᴀɢᴇꜱ Iɴ A Rᴀɴɢᴇ__
-⏣ __/ubclist - Lɪꜱᴛ Cʜᴀᴛꜱ Fʀᴏᴍ Yᴏᴜʀ Usᴇʀʙᴏᴛ__
-⏣ __/settings - Cᴏɴꜰɪɢᴜʀᴇ Yᴏᴜʀ Sᴇᴛᴛɪɴɢꜱ__
-⏣ __/reset - Rᴇꜱᴇᴛ Yᴏᴜʀ Sᴇᴛᴛɪɴɢꜱ__
-⏣ __/resetme - Rᴇsᴇᴛ Yᴏᴜʀ Pᴇʀsᴏɴᴀʟ Cᴏɴꜰɪɢᴜʀᴀᴛɪᴏɴ__
-⏣ __/forwardelay - Sᴇᴛ ᴀ ᴄᴜꜱᴛᴏᴍ ꜰᴏʀᴡᴀʀᴅɪɴɢ ᴅᴇʟᴀʏ__
+Available commands:
 
-<b><u>≬≬ Fᴇᴀᴛᴜʀᴇꜱ :</b></u>
-► __Sᴇʟᴇᴄᴛ A Sᴘᴇᴄɪғɪᴄ Rᴀɴɢᴇ Oꜰ Mᴇssᴀɢᴇs Tᴏ Fᴏʀᴡᴀʀᴅ Oʀ Dᴇᴅᴜᴘʟɪᴄᴀᴛᴇ__
-► __Iɴᴛᴇʀᴀᴄᴛɪᴠᴇʟʏ Sᴇʟᴇᴄᴛ Cʜᴀᴛs Fᴏʀ Dᴇᴅᴜᴘʟɪᴄᴀᴛɪᴏɴ__
-► __Fᴏʀᴡᴀʀᴅ Mᴇꜱꜱᴀɢᴇ Fʀᴏᴍ Pᴜʙʟɪᴄ Cʜᴀɴɴᴇʟ To Yᴏᴜʀ Cʜᴀɴɴᴇʟ Wɪᴛʜᴏᴜᴛ Aᴅᴍɪɴ Peᴇʀᴍɪꜱꜱɪᴏɴ__
-► __Forward Message Fʀᴏᴍ Private Cʜᴀɴɴᴇʟ To Yᴏᴜʀ Cʜᴀɴɴᴇʟ Bʏ Uꜱɪɴɢ UꜱᴇʀBᴏᴛ__
-► __Cᴜꜱᴛᴏм Cᴀᴩᴛɪᴏɴ & Bᴜᴛᴛᴏɴ__
-► __Sᴜᴩᴩᴏʀᴛ Rᴇꜱᴛʀɪᴄᴛᴇḍ Cʜᴀᴛꜱ__
-► __Sᴋɪᴩ Dᴜᴩʟɪᴄᴀᴛᴇ Mᴇꜱꜱᴀɢᴇꜱ__
+● /start - Check if alive.
+● /forward - Forward a range of messages.
+● /unequify - Remove duplicates from a chat.
+● /ubclist - List all userbot chats.
+● /settings - Open the configuration menu.
+● /resetme - A fresh start. Wipes all settings.
+● /forwardelay - Set a custom forward delay.
+
+<b>Features:</b>
+▸ Custom message ranges.
+▸ Interactive chat selection.
+▸ Forwards from public & private channels.
+▸ Custom captions & buttons.
+▸ Skips duplicates automatically.
 """
   
-  HOW_USE_TXT = """<b><u>⚠️ Bᴇꜰᴏʀᴇ Fᴏʀᴡᴀʀᴅ :</b></u>
+  HOW_USE_TXT = """<b>❖ How to Use ❖</b>
+
+A quick checklist to get started:
+
+1.  <b>Add Bot/Userbot:</b> Add a bot token or userbot session in /settings.
+2.  <b>Add Channels:</b> Add target channels where the bot/userbot is an admin.
+3.  <b>Check Permissions:</b>
+    - Userbot must be in private source channels.
+    - Bot/userbot needs admin rights in target channels.
+
+Ready? Use /forward to begin. (ﾉ´ヮ`)ﾉ*:･ﾟ✧"""
   
-► __Aᴅᴅ A Bᴏᴛ Oʀ Uꜱᴇʀʙᴏᴛ__
-► __Aᴅᴅ Aᴛʟᴇᴀꜱᴛ Oɴᴇ Cʜᴀᴛ Tᴏ Cʜᴀɴɴᴇʟꜱ (Yᴏᴜʀ Bᴏᴛ/UꜱᴇʀBᴏᴛ Mᴜꜱᴛ Bᴇ Aᴅᴍɪɴ Tʜᴇʀᴇ)__
-► __Yᴏᴜ Cᴀɴ Aᴅᴅ Cʜᴀᴛꜱ Oʀ Bᴏᴛꜱ Bʏ Uꜱɪɴɢ /settings__
-► __Iꜰ Tʜᴇ **Fʀᴏᴍ Cʜᴀɴɴᴇʟ** Iꜱ Pʀɪᴠᴀᴛᴇ, Yᴏᴜʀ UꜱᴇʀBᴏᴛ Mᴜꜱᴛ Bᴇ A Mᴇᴍʙᴇʀ Iɴ Tʜᴇʀᴇ Oʀ Yᴏᴜʀ Bᴏᴛ Mᴜꜱᴛ Nᴇᴇᴅ Tᴏ Bᴇ Aᴅᴍɪɴ Iɴ Tʜᴇʀᴇ Aʟꜱᴏ__
-► __Tʜᴇɴ Uꜱᴇ /forward Tᴏ Fᴏʀᴡᴀʀᴅ Mᴇꜱꜱᴀɢᴇꜱ, Wʜᴇʀᴇ Iᴛ Aꜱᴋ Fᴏʀ Sᴏᴜʀᴄᴇ Cʜᴀᴛ Tᴏ Fᴏᴡᴀʀᴅ__"""
+  ABOUT_TXT = """<b>❖ About ❖</b>
+
+● <b>Name:</b> {}
+● <b>Language:</b> Python
+● <b>Library:</b> Pyrogram
+● <b>Developer:</b> <a href='https://t.me/partDevil'>partDevil</a>"""
   
-  ABOUT_TXT = """<b>⋉ Mʏ Nᴀᴍᴇ :</b> {}
-<b>⋉ Lᴀɴɢᴜᴀɢᴇ :</b> <a>English</a>
-<b>⋉ Lɪʙʀᴀʀʏ :</b> <a>Pyrogram</a>
-<b>⋉ Sᴇʀᴠᴇʀ :</b> <a>Koyeb</a>
-<b>⋉ Cʜᴀɴɴᴇʟ :</b> <a href='https://t.me/norFederation'>norFed</a>
-<b>⋉ Dᴇᴠᴇʟᴏᴩᴇʀ :</b> <a href='https://t.me/partDevil'>partDevil</a>"""
+  STATUS_TXT = """<b>❖ Bot Status ❖</b>
   
-  STATUS_TXT = """<b><u>Bᴏᴛ Sᴛᴀᴛᴜꜱ:</u></b>
-  
-<b>⊛ Tᴏᴛᴀʟ Uꜱᴇʀꜱ :</b> <code>{}</code>
-<b>⚝ Tᴏᴛᴀʟ Bᴏᴛꜱ :</b> <code>{}</code>
-<b>❉ Fᴏʀᴡᴀʀᴅɪɴɢ :</b> <code>{}</code>
+● <b>Total Users:</b> <code>{}</code>
+● <b>Total Bots & Userbots:</b> <code>{}</code>
+● <b>Active Forwards:</b> <code>{}</code>
 """
   
-  FROM_MSG = "<b><u>Sᴇᴛ Sᴏᴜʀᴄᴇ Cʜᴀᴛ</></>\n\nForward The Last Mᴇꜱꜱᴀɢᴇ Or Last Mᴇꜱꜱᴀɢᴇ Lɪɴᴋ Oꜰ Sᴏᴜʀᴄᴇ Cʜᴀᴛ.\n/cancel - Tᴏ Cᴀɴᴄᴇʟ Tʜɪꜱ Pʀᴏᴄᴇꜱꜱ"
-  TO_MSG = "<b><u>Cʜᴏᴏꜱᴇ Tᴀʀɢᴇᴛ Cʜᴀᴛ</u></b>\n\nCʜᴏᴏꜱᴇ Yᴏᴜʀ Tᴀʀɢᴇᴛ Cʜᴀᴛ Fʀᴏᴍ Tʜᴇ Gɪᴠᴇɴ Bᴜᴛᴛᴏɴꜱ.\n/cancel - Tᴏ Cᴀɴᴄᴇʟ Tʜɪꜱ Pʀᴏᴄᴇꜱꜱ"
+  FROM_MSG = "<b>Source Chat?</b>\n\nForward the last message or send a message link.\n\n/cancel - Abort mission."
+  TO_MSG = "<b>Target Chat?</b>\n\nSelect a target chat from the buttons below.\n\n/cancel - Abort mission."
   
-  RANGE_SELECTION_TXT = """<b><u>SELECT MESSAGE RANGE</u></b>
+  RANGE_SELECTION_TXT = """<b>❖ Message Range ❖</b>
 
-You can either forward all messages by default or specify a custom range using the buttons below.
+Forward all messages or define a custom range below.
 
-<i>Note: Forwarding all messages from a very large channel may take a significant amount of time.</i>"""
+<i>Note: Large channels can take a while. Patience is a virtue.</i>"""
 
-  UNEQUIFY_START_TXT = """<b><u>Advanced Deduplicator</u></b>
+  UNEQUIFY_START_TXT = """<b>❖ Deduplicator ❖</b>
 
-How would you like to select the target channel?
+Select the target channel.
 
-**Usage:** `/unequify [channel_username or chat_id]` for manual input."""
+Manual input: `/unequify [channel_username]`"""
   
-  CANCEL = "<b> Pʀᴏᴄᴇꜱꜱ Cᴀɴᴄᴇʟʟᴇᴅ Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ! </b>"
-  BOT_DETAILS = "<b><u>📄 Bᴏᴛ Dᴇᴛᴀɪʟꜱ</u></b>\n\n<b>➣ Nᴀᴍᴇ :</b> <code>{}</code>\n<b>➣ Bᴏᴛ ID :</b> <code>{}</code>\n<b>➣ Uꜱᴇʀɴᴀᴍᴇ :</b> {}"
-  USER_DETAILS = "<b><u>📄 UꜱᴇʀBᴏᴛ Dᴇᴛᴀɪʟꜱ</u></b>\n\n<b>➣ Nᴀᴍᴇ :</b> <code>{}</code>\n<b>➣ Uꜱᴇʀ ID :</b> <code>{}</code>\n<b>➣ Uꜱᴇʀɴᴀᴍᴇ :</b> {}"  
+  CANCEL = "Process cancelled. (o˘◡˘o)"
+  BOT_DETAILS = "<b>❖ Bot Details ❖</b>\n\n● <b>Name:</b> <code>{}</code>\n● <b>ID:</b> <code>{}</code>\n● <b>Username:</b> {}"
+  USER_DETAILS = "<b>❖ Userbot Details ❖</b>\n\n● <b>Name:</b> <code>{}</code>\n● <b>ID:</b> <code>{}</code>\n● <b>Username:</b> {}"  
          
-  TEXT = """<b><u>Fᴏʀᴡᴀʀᴅ Sᴛᴀᴛᴜꜱ</u></b>
-  
-<b>🎯 Total In Range:</b> <code>{total}</code>
-<b>🕵 Fᴇᴛᴄʜᴇᴅ Mᴇꜱꜱᴀɢᴇ :</b> <code>{}</code>
-<b>✅ Sᴜᴄᴄᴇꜱꜰᴜʟʟʏ Fᴏʀᴡᴀʀᴅ :</b> <code>{}</code>
-<b>👥 Dᴜʙʟɪᴄᴀᴛᴇ Mᴇꜱꜱᴀɢᴇ :</b> <code>{}</code>
-<b>🗑 Dᴇʟᴇᴛᴇᴅ Mᴇꜱꜱᴀɢᴇ :</b> <code>{}</code>
-<b>🔁 Fɪʟᴛᴇʀᴇᴅ Mᴇꜱꜱᴀɢᴇ :</b> <code>{}</code>
-<b>📊 Cᴜʀʀᴇɴᴛ Sᴛᴀᴛᴜꜱ :</b> <code>{}</code>
-<b>🔥 Pᴇʀᴄᴇɴᴛᴀɢᴇ :</b> <code>{}</code> %
+  TEXT = """<b>❖ Forwarding Status ❖</b>
 
-{}
+● <b>Total in Range:</b> <code>{total}</code>
+● <b>Processed:</b> <code>{fetched}</code>
+● <b>Forwarded:</b> <code>{forwarded}</code>
+● <b>Duplicates:</b> <code>{duplicate}</code>
+● <b>Skipped:</b> <code>{skipped}</code>
+● <b>Status:</b> <code>{status}</code>
+● <b>Progress:</b> <code>{percentage}%</code>
+
+{progress_bar}
 """
 
-  DUPLICATE_TEXT = """<b><u>UɴᴇQᴜɪꜰʏ Sᴛᴀᴛᴜꜱ</u></b>
+  DUPLICATE_TEXT = """<b>❖ Deduplication Status ❖</b>
 
-<b>🎯 Total In Range:</b> <code>{total}</code>
-<b>🕵 Mᴇssᴀɢᴇs Sᴄᴀɴɴᴇᴅ :</b> <code>{}</code>
-<b>👥 Dᴜʙʟɪᴄᴀᴛᴇ Dᴇʟᴇᴛᴇᴅ :</b> <code>{}</code>
+● <b>Total in Range:</b> <code>{total}</code>
+● <b>Messages Scanned:</b> <code>{scanned}</code>
+● <b>Duplicates Deleted:</b> <code>{deleted}</code>
 
-{}
+{progress}
 """
-  DOUBLE_CHECK = """<b><u>Dᴏᴜʙʟᴇ Cʜᴇᴄᴋɪɴɢ</u></b>
+  DOUBLE_CHECK = """<b>❖ Final Check ❖</b>
+
+Here's the plan:
+
+● <b>Using:</b> [{botname}](t.me/{botuname})
+● <b>From:</b> <code>{from_chat}</code>
+● <b>To:</b> <code>{to_chat}</code>
+● <b>Range:</b> <code>{message_range}</code>
+
+<i>Ensure [{botname}](t.me/{botuname}) is an admin in the target chat!</i>
+
+<b>Proceed?</b>"""
   
-Bᴇꜰᴏʀ Fᴏʀᴡᴀʀᴅɪɴɢ Tʜᴇ Mᴇꜱꜱᴀɢᴇꜱ Cʟɪᴄᴋ Tʜᴇ Yᴇꜱ Bᴜᴛᴛᴏɴ Oɴʟʏ Aꜰᴛᴇʀ Cʜᴇᴄᴋɪɴɢ Tʜᴇ Fᴏʟʟᴏᴡɪɴɢ
+  FORWARDELAY_TXT = """<b>❖ Forward Delay ❖</b>
 
-<b>★ Yᴏᴜʀ Bᴏᴛ :</b> [{botname}](t.me/{botuname})
-<b>★ Fʀᴏᴍ Cʜᴀɴɴᴇʟ :</b> <code>{from_chat}</code>
-<b>★ Tᴏ Cʜᴀɴɴᴇʟ :</b> <code>{to_chat}</code>
-<b>★ Mᴇssᴀɢᴇ Rᴀɴɢᴇ :</b> <code>{message_range}</code>
+Set a custom delay between forwards. Helps avoid API limits.
 
-<i>° [{botname}](t.me/{botuname}) Mᴜꜱᴛ Bᴇ Aᴅᴍɪɴ Iɴ <b>Tᴀʀɢᴇᴛ Cʜᴀᴛ</b></i> (<code>{to_chat}</code>)
-<i>° Iꜰ Tʜᴇ <b>Sᴏᴜʀᴄᴇ Cʜᴀᴛ</b> Iꜱ Pʀɪᴠᴀᴛᴇ Yᴏᴜʀ Userbot Mᴜꜱᴛ Bᴇ Mᴇᴍʙᴇʀ Or Yᴏᴜʀ Bᴏᴛ Mᴜꜱᴛ Bᴇ Aᴅᴍɪɴ Iɴ Tʜᴇʀᴇ Aʟꜱᴏ</i>
+<b>Usage:</b> `/forwardelay [seconds]`
+<b>Example:</b> `/forwardelay 0.5`
 
-<b>Iꜰ Tʜᴇ Aʙᴏᴠᴇ Iꜱ Cʜᴇᴄᴋᴇᴅ Tʜᴇɴ Tʜᴇ Yᴇꜱ Bᴜᴛᴛᴏɴ Cᴀɴ Bᴇ Cʟɪᴄᴋᴇᴅ</b>"""
-  
-  FORWARDELAY_TXT = """<b><u>Set Forwarding Delay</u></b>
+Default is 1 second."""
 
-Use this command to set a custom delay (in seconds) between forwarded messages to avoid Telegram's flood limits.
-
-<b>Usage:</b> <code>/forwardelay [delay_in_seconds]</code>
-<b>Example:</b> <code>/forwardelay 0.5</code> (sets a half-second delay)
-<b>Example:</b> <code>/forwardelay 2</code> (sets a two-second delay)
-
-The default delay is 1 second."""
+}
