@@ -17,32 +17,23 @@ SYD_CHANNELS = ["norFederation"]
 @Client.on_message(filters.private & filters.command(["fwd", "forward"]))
 async def run(bot, message):
     user_id = message.from_user.id
-    # Allow user to select from ANY available client (bot or userbot)
     bots = await db.get_bots(user_id)
     if not bots:
-        return await message.reply("Yᴏᴜ Dɪᴅ Nᴏᴛ Aᴅᴅᴇᴅ Aɴʏ Bᴏᴛ ᴏʀ Usᴇʀʙᴏᴛ. Pʟᴇᴀꜱᴇ Aᴅᴅ Oɴᴇ Uꜱɪɴɢ /settings !")
+        return await message.reply("Yᴏᴜ Dɪᴅ Nᴏᴛ Aᴅᴅᴇᴅ Aɴʏ Bᴏᴛ Oʀ UꜱᴇʀBᴏᴛ. Pʟᴇᴀꜱᴇ Aᴅᴅ Oɴᴇ Uꜱɪɴɢ /settings !")
 
     if len(bots) == 1:
-        # Store the selected bot/userbot ID for the user
-        temp.FORWARD_BOT_ID[user_id] = bots[0]['id']
         await choose_target_chat(bot, message, bots[0]['id'])
     else:
         buttons = []
         for _bot in bots:
-            # Display name correctly for bots and userbots
-            name = _bot.get('name', 'Unnamed')
-            bot_type = "BOT" if _bot.get('is_bot') else "USER"
-            buttons.append([InlineKeyboardButton(f"{name} ({bot_type})", callback_data=f"select_bot_{_bot['id']}")])
+            bot_name = _bot.get('name') or _bot.get('username', f"ID: {_bot['id']}")
+            buttons.append([InlineKeyboardButton(bot_name, callback_data=f"select_bot_{_bot['id']}")])
         buttons.append([InlineKeyboardButton("❌ Cancel", callback_data="close_btn")])
-        await message.reply_text("<b><u>Select a Client</u></b>\n\nChoose the Bot or Userbot you want to use for forwarding.", reply_markup=InlineKeyboardMarkup(buttons))
-
+        await message.reply_text("<b><u>Select a Bot or Userbot</u></b>\n\nChoose the one you want to use for forwarding.", reply_markup=InlineKeyboardMarkup(buttons))
 
 @Client.on_callback_query(filters.regex(r'^select_bot_'))
 async def select_bot_callback(bot, query):
-    user_id = query.from_user.id
     bot_id = int(query.data.split('_')[2])
-    # Store the selected bot ID for the user
-    temp.FORWARD_BOT_ID[user_id] = bot_id
     await query.message.delete()
     await choose_target_chat(bot, query.message, bot_id)
 
@@ -78,8 +69,8 @@ async def get_target_chat(bot, query):
     toid = int(query.data.split('_')[2])
     bot_id = int(query.data.split('_')[3])
 
-    # Store bot_id in a user-specific way
-    temp.FORWARD_BOT_ID[user_id] = bot_id
+    # Store the selected bot_id in a user-specific session
+    temp.FORWARD_SESSIONS[user_id] = bot_id
 
     await query.message.delete()
 
@@ -131,17 +122,12 @@ async def show_fwd_confirmation(bot, session_id, forward_all=False):
     if not session: return
 
     user_id = session['user_id']
-    bot_id = temp.FORWARD_BOT_ID.get(user_id)
+    # Retrieve bot_id from the user-specific session
+    bot_id = temp.FORWARD_SESSIONS.get(user_id)
     if not bot_id:
-        # This case should ideally not happen if the flow is correct
-        await bot.send_message(session['chat_id'], "Error: Bot selection was lost. Please start over.")
-        return
+        return await bot.send_message(chat_id=session['chat_id'], text="Error: Could not determine which bot to use. Please start over.")
 
     _bot = await db.get_bot(user_id, bot_id)
-    if not _bot:
-        await bot.send_message(session['chat_id'], "Error: Could not retrieve bot details. Please check settings.")
-        return
-        
     channels = await db.get_user_channels(user_id)
     to_title = next((c['title'] for c in channels if c['chat_id'] == session['to_chat_id']), 'Unknown')
 
@@ -159,8 +145,8 @@ async def show_fwd_confirmation(bot, session_id, forward_all=False):
     if session['order'] == 'desc' and not forward_all:
         start_id, end_id = end_id, start_id
 
-    # Safely get bot username
-    bot_username = _bot.get('username', 'username_not_set')
+    bot_name = _bot.get('name') or _bot.get('username', 'N/A')
+    bot_uname = _bot.get('username', '')
 
     buttons = [[
         InlineKeyboardButton('Yᴇꜱ', callback_data=f"start_public_{forward_id}"),
@@ -170,8 +156,8 @@ async def show_fwd_confirmation(bot, session_id, forward_all=False):
     await bot.send_message(
         chat_id=session['chat_id'],
         text=Translation.DOUBLE_CHECK.format(
-            botname=_bot['name'],
-            botuname=bot_username,
+            botname=bot_name,
+            botuname=bot_uname,
             from_chat=session['from_title'],
             to_chat=to_title,
             message_range=message_range_text
@@ -192,6 +178,8 @@ async def show_fwd_confirmation(bot, session_id, forward_all=False):
         order=session['order']
     )
     temp.RANGE_SESSIONS.pop(session_id, None)
+    # Clean up the session data
+    temp.FORWARD_SESSIONS.pop(user_id, None)
 
 # --- Generic Range Selection Callbacks ---
 
@@ -265,7 +253,11 @@ async def cancel_range_selection(bot, query):
     if not session or session['user_id'] != query.from_user.id:
         return await query.answer("This is not for you!", show_alert=True)
 
+    # Clean up any related session data
+    temp.FORWARD_SESSIONS.pop(query.from_user.id, None)
+    temp.USERBOT_SESSIONS.pop(query.from_user.id, None)
     temp.RANGE_SESSIONS.pop(session_id, None)
+    
     await query.message.edit_text("Operation cancelled.")
     await query.answer()
 
