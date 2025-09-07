@@ -140,7 +140,7 @@ async def list_userbot_chats(bot: Client, message: Message, user_id: int, userbo
 
     sts = await message.reply("`⏳ Fetching chat list...`")
 
-    chat_list_text = "<b>❖ Userbot Chat List ❖</b>\n\n✓ - Indicates delete permissions.\n\n"
+    chat_list_text = "<b>❖ Userbot Chat List ❖</b>\n\n✓ indicates delete permissions.\n• indicates no permissions.\n\n"
 
     try:
         session_string = userbot_config['session']
@@ -148,7 +148,7 @@ async def list_userbot_chats(bot: Client, message: Message, user_id: int, userbo
         async with CLIENT().client(session_string, user=True) as userbot:
             async for dialog in userbot.get_dialogs():
                 chat = dialog.chat
-                perms = "-"
+                perms = "•"
                 try:
                     me = await userbot.get_chat_member(chat.id, "me")
                     if me.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER] and (me.privileges and me.privileges.can_delete_messages):
@@ -205,12 +205,12 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
 
         chats = {}
         serial = 1
-        text = "Reply with the number or Chat ID of the target channel.\n\n✓ - Indicates delete permissions.\n\n"
+        text = "Reply with the number or Chat ID of the target channel.\n\n✓ indicates delete permissions.\n• indicates no permissions.\n\n"
         try:
             session_string = userbot_config['session']
             async with CLIENT().client(session_string, user=True) as userbot:
                 async for dialog in userbot.get_dialogs():
-                    perms = "-"
+                    perms = "•"
                     try:
                         me = await userbot.get_chat_member(dialog.chat.id, "me")
                         if me.status in [ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER] and (me.privileges and me.privileges.can_delete_messages):
