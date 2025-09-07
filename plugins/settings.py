@@ -20,6 +20,7 @@ async def settings(client, message):
 
 @Client.on_callback_query(filters.regex(r'^settings'))
 async def settings_query(bot, query):
+  await query.answer()
   user_id = query.from_user.id
   i, type = query.data.split("#")
   buttons = [[InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data="settings#main")]]
@@ -48,8 +49,8 @@ async def settings_query(bot, query):
   
   elif type=="addbot":
      await query.message.delete()
-     bot = await CLIENT.add_bot(bot, query)
-     if bot != True: return
+     add_bot_status = await CLIENT.add_bot(bot, query)
+     if add_bot_status != True: return
      await query.message.reply_text(
         "<b>Bᴏᴛ Tᴏᴋᴇɴ Sᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ Aᴅᴅᴇᴅ Tᴏ Dᴀᴛᴀʙᴀꜱᴇ ✓</b>",
         reply_markup=InlineKeyboardMarkup(buttons))
@@ -111,13 +112,13 @@ async def settings_query(bot, query):
          await text.edit_text('Pʀᴏᴄᴇꜱꜱ Hᴀꜱ Bᴇᴇɴ Cᴀɴᴄᴇʟʟᴇᴅ Aᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ Dᴜᴇ Tᴏ Nᴏ Rᴇꜱᴩᴏɴꜱᴇ!', reply_markup=InlineKeyboardMarkup(buttons))
   
   elif type=="editbot": 
-     bot = await db.get_bot(user_id)
-     TEXT = Translation.BOT_DETAILS if bot['is_bot'] else Translation.USER_DETAILS
+     _bot = await db.get_bot(user_id)
+     TEXT = Translation.BOT_DETAILS if _bot['is_bot'] else Translation.USER_DETAILS
      buttons = [[InlineKeyboardButton('⛒ Rᴇᴍᴏᴠᴇ ⛒', callback_data=f"settings#removebot")
                ],
                [InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data="settings#bots")]]
      await query.message.edit_text(
-        TEXT.format(bot['name'], bot['id'], bot['username']),
+        TEXT.format(_bot['name'], _bot['id'], _bot['username']),
         reply_markup=InlineKeyboardMarkup(buttons))
                                              
   elif type=="removebot":
