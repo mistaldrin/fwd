@@ -9,7 +9,8 @@ import asyncio
 import logging 
 import logging.config
 # The 'db' import is removed from here to prevent circular dependencies
-from config import Config  
+from config import Config, temp
+from database import db
 from aiohttp import web
 from plugins import web_server
 from pyrogram import Client, __version__, idle
@@ -52,6 +53,9 @@ class Bot(Client):
         self.first_name = me.first_name
         self.set_parse_mode(ParseMode.DEFAULT)
         
+        # Load banned users on start
+        temp.BANNED_USERS = await db.get_banned()
+
         # Start the web server
         app = web.AppRunner(await web_server())
         await app.setup()
