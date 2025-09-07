@@ -13,6 +13,24 @@ STATUS = {}
 SYD = ["https://files.catbox.moe/3lwlbm.png"]
 logger = logging.getLogger(__name__)
 
+def get_readable_time(seconds: int) -> str:
+    result = ""
+    (days, remainder) = divmod(seconds, 86400)
+    days = int(days)
+    if days != 0:
+        result += f"{days}d"
+    (hours, remainder) = divmod(remainder, 3600)
+    hours = int(hours)
+    if hours != 0:
+        result += f"{hours}h"
+    (minutes, seconds) = divmod(remainder, 60)
+    minutes = int(minutes)
+    if minutes != 0:
+        result += f"{minutes}m"
+    seconds = int(seconds)
+    result += f"{seconds}s"
+    return result
+
 class STS:
     def __init__(self, id):
         self.id = id
@@ -105,8 +123,10 @@ async def update_range_message(bot, session_id, message=None):
 
     reply_markup = InlineKeyboardMarkup(buttons)
     try:
-        # Use the correct message object to send the photo
-        await bot.send_photo(chat_id=session['chat_id'], photo=random.choice(SYD),
+        if message:
+             await message.edit_caption(caption=text, reply_markup=reply_markup)
+        else:
+            await bot.send_photo(chat_id=session['chat_id'], photo=random.choice(SYD),
                              caption=text, reply_markup=reply_markup, quote=True)
     except Exception as e:
         logger.error(f"Error sending range message: {e}", exc_info=True)
