@@ -1,6 +1,6 @@
 import re
 import asyncio
-from .utils import STS, start_range_selection, update_range_message, force_subscribe
+from .utils import STS, start_range_selection, update_range_message
 from .test import CLIENT
 from database import db
 from config import temp
@@ -11,10 +11,10 @@ from pyrogram.errors.exceptions.not_acceptable_406 import ChannelPrivate as Priv
 from pyrogram.errors.exceptions.bad_request_400 import ChannelInvalid, ChatAdminRequired, UsernameInvalid, UsernameNotModified, ChannelPrivate, PeerIdInvalid
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 
+
 #===================Run Function===================#
 
 @Client.on_message(filters.private & filters.command(["fwd", "forward"]))
-@force_subscribe
 async def run(bot, message):
     user_id = message.from_user.id
     bots = await db.get_bots(user_id)
@@ -268,7 +268,7 @@ async def cancel_range_selection(bot, query):
     await query.answer()
 
 @Client.on_callback_query(filters.regex("check_subscription"))
-async def check_subscription(client, callback_query: CallbackQuery):
-    # This function is now linked to the force_subscribe decorator
-    # It re-checks subscription when the user clicks the "Joined" button.
-    await force_subscribe(client, callback_query)
+async def check_subscription(client, callback_query):
+    # This handler is no longer needed with the removal of force subscribe.
+    # It can be safely removed or left as-is, it won't be called.
+    await callback_query.answer("This feature is currently disabled.", show_alert=True)
