@@ -1,9 +1,3 @@
-# MrSyD
-# Telegram Channel @Bot_Cracker
-# Developer @syd_xyz
-
-
-
 import re
 import time as tm
 from database import db 
@@ -163,20 +157,20 @@ async def update_range_message(bot, session_id, message=None):
             InlineKeyboardButton(display_button_text, callback_data="range_info")
         ],
         [
-            InlineKeyboardButton("✎ Edit Start ID", callback_data=f"range_edit_start_{session_id}"),
-            InlineKeyboardButton("✎ Edit End ID", callback_data=f"range_edit_end_{session_id}")
+            InlineKeyboardButton("✎ Edit Start", callback_data=f"range_edit_start_{session_id}"),
+            InlineKeyboardButton("✎ Edit End", callback_data=f"range_edit_end_{session_id}")
         ],
         [
             InlineKeyboardButton("⇄ Swap Order", callback_data=f"range_swap_{session_id}")
         ],
         [
-            InlineKeyboardButton("✅ Confirm Custom Range", callback_data=f"range_confirm_{session_id}")
+            InlineKeyboardButton("✓ Confirm Custom Range", callback_data=f"range_confirm_{session_id}")
         ],
         [
-            InlineKeyboardButton("🚀 Forward All Messages", callback_data=f"range_all_{session_id}")
+            InlineKeyboardButton("🚀 Forward All", callback_data=f"range_all_{session_id}")
         ],
         [
-            InlineKeyboardButton("❌ Cancel", callback_data=f"range_cancel_{session_id}")
+            InlineKeyboardButton("« Cancel", callback_data=f"range_cancel_{session_id}")
         ]
     ]
     
