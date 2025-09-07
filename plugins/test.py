@@ -20,7 +20,7 @@ from typing import Union, Optional, AsyncGenerator
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-BOT_TOKEN_TEXT = "1. Go to @BotFather and send `/newbot`.\n\n2. Get the bot token from the reply.\n\n3. Forward that message here.\n\nEasy peasy. (´｡• ᵕ •｡`)"
+BOT_TOKEN_TEXT = "To add a bot, send its token or forward the message from @BotFather.\n\n/cancel - to cancel."
 SESSION_STRING_SIZE = 351
 
 
@@ -51,14 +51,15 @@ class CLIENT:
      msg = await bot.ask(chat_id=user_id, text=BOT_TOKEN_TEXT)
      if msg.text=='/cancel':
         return await msg.reply('Process cancelled.')
-     elif not msg.forward_date:
-       return await msg.reply_text("Not a forwarded message.")
-     elif str(msg.forward_from.id) != "93372553":
-       return await msg.reply_text("Message not forwarded from @BotFather.")
-     bot_token = re.findall(r'\d[0-9]{8,10}:[0-9A-Za-z_-]{35}', msg.text, re.IGNORECASE)
-     bot_token = bot_token[0] if bot_token else None
-     if not bot_token:
-       return await msg.reply_text("No valid bot token found.")
+
+     # Use regex to find a token in the message text
+     bot_token_match = re.search(r'(\d+:[a-zA-Z0-9_-]{35})', msg.text)
+
+     if not bot_token_match:
+        return await msg.reply_text("No valid bot token found.")
+
+     bot_token = bot_token_match.group(1)
+     
      try:
        async with self.client(bot_token, False) as _client:
           _bot = await _client.get_me()
