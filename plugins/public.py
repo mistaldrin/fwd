@@ -72,35 +72,31 @@ async def choose_target_chat_prompt(bot, message):
 @Client.on_callback_query(filters.regex(r'^fwd_target_'))
 async def select_target_callback(bot, query):
     user_id = query.from_user.id
+    chat_id = query.message.chat.id
     to_chat_id = int(query.data.split('_')[-1])
     await query.message.delete()
 
     try:
         # --- Step 3: Get End Point ---
         end_point_msg = await bot.ask(user_id, Translation.FROM_MSG)
-        if end_point_msg.text and end_point_msg.text.lower() == "/cancel": return await end_point_msg.reply(Translation.CANCEL)
+        if end_point_msg.text and end_point_msg.text.lower() == "/cancel": 
+            return await end_point_msg.reply(Translation.CANCEL)
 
         from_chat_id, end_id, error = parse_message_input(end_point_msg)
-        if error: return await end_point_msg.reply(error)
+        if error: 
+            return await end_point_msg.reply(error)
 
-        # --- Step 4: Get Start Point ---
-        start_point_msg = await bot.ask(user_id, Translation.START_MSG)
-        if start_point_msg.text and start_point_msg.text.lower() == "/cancel": return await start_point_msg.reply(Translation.CANCEL)
-
-        start_chat_id, start_id, error = parse_message_input(start_point_msg)
-        if error: return await start_point_msg.reply(error)
+        # --- Step 4: Show Range Selection (Start is now defaulted) ---
+        start_id = 1
         
-        if from_chat_id != start_chat_id:
-            return await start_point_msg.reply("The start and end points must be from the same channel.")
-
-        # --- Step 5: Show Range Selection ---
         try:
             chat_info = await bot.get_chat(from_chat_id)
             from_title = chat_info.title
         except Exception:
             from_title = "Private/Unknown Chat"
 
-        await start_range_selection(bot, query.message, from_chat_id, from_title, to_chat_id, start_id, end_id)
+        # Pass a valid message object (end_point_msg) to start the selection
+        await start_range_selection(bot, end_point_msg, from_chat_id, from_title, to_chat_id, start_id, end_id)
 
     except asyncio.TimeoutError:
         await bot.send_message(user_id, "Process timed out and was cancelled.")
@@ -138,11 +134,11 @@ async def range_selection_callbacks(bot, query):
 
     elif sub_action == "edit":
         value_type = parts[2] # start or end
+        await query.message.delete()
         try:
             ask_msg = await bot.ask(user_id, f"Send the new **{value_type.upper()} ID**.", timeout=60)
             if ask_msg.text and ask_msg.text.isdigit():
                 session[f'{value_type}_id'] = int(ask_msg.text)
-                await query.message.delete()
                 await update_range_message(bot, session_id)
             else:
                 await ask_msg.reply("Invalid ID. Please send a number.")
@@ -167,15 +163,10 @@ async def show_final_confirmation(bot, session_id):
 
     start_id = session['start_id']
     end_id = session['end_id']
-
-    # Ensure start_id is always less than end_id for range calculation
+    
     final_start_id = min(start_id, end_id)
     final_end_id = max(start_id, end_id)
     
-    if session['order'] == 'desc':
-        # The backend will handle the iteration order, just store the absolute range
-        pass
-
     message_range_text = f"{final_start_id} to {final_end_id}"
     forward_id = f"{user_id}-{session_id}"
 
