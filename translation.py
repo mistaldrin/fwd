@@ -15,19 +15,12 @@ Select 'Help' for a list of commands.
 Available commands:
 
 ● /start - Check if alive.
-● /forward [optional: source chat] - Forward messages.
-● /unequify [optional: source chat] - Remove duplicates from a chat.
+● /forward [source] - Forward messages. Source can be a link or ID.
+● /unequify - Remove duplicates from a chat.
 ● /ubclist - List all userbot chats.
 ● /settings - Open the configuration menu.
 ● /resetme - A fresh start. Wipes all settings.
 ● /forwardelay - Set a custom forward delay.
-
-<b>Features:</b>
-▸ Custom message ranges.
-▸ Interactive chat selection.
-▸ Forwards from public & private channels.
-▸ Custom captions & buttons.
-▸ Skips duplicates automatically.
 """
   
   HOW_USE_TXT = """<b>֎ How to Use ֎</b>
@@ -40,7 +33,7 @@ A quick checklist to get started:
     - Userbot must be in private source channels.
     - Bot/userbot needs admin rights in target channels.
 
-Ready? Use `/forward` to begin. (ﾉ´ヮ`)ﾉ*:･ﾟ✧"""
+Ready? Use /forward to begin. (ﾉ´ヮ`)ﾉ*:･ﾟ✧"""
   
   ABOUT_TXT = """<b>֎ About ֎</b>
 
@@ -56,15 +49,13 @@ Ready? Use `/forward` to begin. (ﾉ´ヮ`)ﾉ*:･ﾟ✧"""
 ● <b>Active Forwards:</b> <code>{}</code>
 """
   
-  SOURCE_MSG_BOT = "<b>Source Chat?</b>\n\nSend the channel username, ID, or a message link.\n\n/cancel - Abort mission."
-  SOURCE_MSG_USERBOT = "<b>Source Chat?</b>\n\nSelect a source chat from the list below, or reply with a Chat ID."
   TO_MSG = "<b>Target Chat?</b>\n\nSelect a target chat from the buttons below.\n\n/cancel - Abort mission."
+  SOURCE_MSG_BOT = "<b>Source Chat?</b>\n\nSend the source channel ID or a link to any message in it.\n\n/cancel - Abort mission."
+  SOURCE_MSG_USERBOT = "<b>Source Chat?</b>\n\nReply with the number or Chat ID of the source channel."
   
   RANGE_SELECTION_TXT = """<b>֎ Message Range ֎</b>
 
-Ready to forward all messages.
-
-The range is currently set from the oldest to the newest message. Press 'Forward All' to begin, or use the buttons below to define a custom range.
+Forward all messages or define a custom range below.
 
 <i>Note: Large channels can take a while. Patience is a virtue.</i>"""
 
@@ -80,11 +71,12 @@ Manual input: `/unequify [channel_username]`"""
          
   TEXT = """<b>֎ Forwarding Status ֎</b>
 
-● <b>Total in Range:</b> <code>{total}</code>
-● <b>Processed:</b> <code>{fetched}</code>
+● <b>Fetched:</b> <code>{fetched}</code>
 ● <b>Forwarded:</b> <code>{forwarded}</code>
-● <b>Duplicates:</b> <code>{duplicate}</code>
+● <b>Duplicate:</b> <code>{duplicate}</code>
+● <b>Deleted:</b> <code>{deleted}</code>
 ● <b>Skipped:</b> <code>{skipped}</code>
+● <b>Filtered:</b> <code>{filtered}</code>
 ● <b>Status:</b> <code>{status}</code>
 ● <b>Progress:</b> <code>{percentage}%</code>
 
