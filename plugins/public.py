@@ -85,6 +85,7 @@ async def choose_target_chat(bot, message, user_id, bot_id):
 async def get_target_chat(bot, query):
     await query.answer()
     user_id = query.from_user.id
+    chat_id_for_reply = query.message.chat.id
     toid = int(query.data.split('_')[2])
     bot_id = int(query.data.split('_')[3])
 
@@ -94,15 +95,18 @@ async def get_target_chat(bot, query):
     await query.message.delete()
 
     try:
-        await bot.send_photo(
-            chat_id=query.message.chat.id,
+        ask_message = await bot.send_photo(
+            chat_id=chat_id_for_reply,
             photo=random.choice(SYD),
             caption=Translation.FROM_MSG,
             quote=True
         )
-        fromid_msg = await bot.listen(chat_id=query.message.chat.id, timeout=300)
+        fromid_msg = await bot.listen(chat_id=chat_id_for_reply, timeout=300)
     except asyncio.TimeoutError:
-        return await bot.send_message(query.message.chat.id, Translation.CANCEL)
+        await ask_message.delete()
+        return await bot.send_message(chat_id_for_reply, Translation.CANCEL)
+
+    await ask_message.delete()
 
     if fromid_msg.text and fromid_msg.text.startswith('/'):
         return await fromid_msg.reply(Translation.CANCEL)
@@ -121,7 +125,8 @@ async def get_target_chat(bot, query):
         last_msg_id = fromid_msg.forward_from_message_id
         chat_id = fromid_msg.forward_from_chat.username or fromid_msg.forward_from_chat.id
     else:
-        return await fromid_msg.reply_text("Invalid input. A message link or forwarded message is required.")
+        await fromid_msg.delete()
+        return await bot.send_message(chat_id_for_reply, "Invalid input. A message link or forwarded message is required.")
 
     try:
         # Use the selected bot/userbot to get chat info, not the main bot
