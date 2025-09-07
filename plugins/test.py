@@ -20,9 +20,31 @@ from typing import Union, Optional, AsyncGenerator
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-BOT_TOKEN_TEXT = "To add a bot, send its token or forward the message from @BotFather.\n\n/cancel - to cancel."
+BOT_TOKEN_TEXT = "1. Go to @BotFather and send `/newbot`.\n\n2. Get the bot token from the reply.\n\n3. Forward that message here or just send the token.\n\nEasy peasy. (´｡• ᵕ •｡`)"
 SESSION_STRING_SIZE = 351
 
+async def start_clone_bot(FwdBot, data=None):
+   """Starts the client and patches the iter_messages method."""
+   await FwdBot.start()
+   
+   async def iter_messages(
+      self, 
+      chat_id: Union[int, str], 
+      limit: int, 
+      offset: int = 0
+      ) -> Optional[AsyncGenerator["types.Message", None]]:
+        current = offset
+        while True:
+            new_diff = min(200, limit - current)
+            if new_diff <= 0:
+                return
+            messages = await self.get_messages(chat_id, list(range(current, current+new_diff+1)))
+            for message in messages:
+                yield message
+                current += 1
+
+   FwdBot.iter_messages = iter_messages.__get__(FwdBot, Client)
+   return FwdBot
 
 class CLIENT: 
   def __init__(self):
@@ -30,38 +52,32 @@ class CLIENT:
      self.api_hash = Config.API_HASH
     
   def client(self, data, user=None):
-     # Give each client a unique name to avoid conflicts
+     """Creates a Pyrogram client instance."""
      client_name = str(uuid4())
-     
-     # Userbot client from session dictionary (used by /forward)
      if user is None and isinstance(data, dict) and not data.get('is_bot'):
         return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, session_string=data.get('session'), in_memory=True)
-     
-     # Userbot client from session string (used by /unequify, /ubclist)
      elif user is True:
         return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, session_string=data, in_memory=True)
-     
-     # Bot client from token
      else:
         token = data.get('token') if isinstance(data, dict) else data
         return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, bot_token=token, in_memory=True)
   
-  async def add_bot(self, bot, message):
+  async def add_bot(self, bot, message: Message):
+     """Handles the conversation flow for adding a new bot."""
      user_id = int(message.from_user.id)
      msg = await bot.ask(chat_id=user_id, text=BOT_TOKEN_TEXT)
-     if msg.text=='/cancel':
+     
+     if msg.text == '/cancel':
         return await msg.reply('Process cancelled.')
 
-     # Use regex to find a token in the message text
-     bot_token_match = re.search(r'(\d+:[a-zA-Z0-9_-]{35})', msg.text)
+     bot_token_match = re.findall(r'(\d{8,10}:[a-zA-Z0-9_-]{35})', msg.text)
+     bot_token = bot_token_match[0] if bot_token_match else None
 
-     if not bot_token_match:
-        return await msg.reply_text("No valid bot token found.")
+     if not bot_token:
+       return await msg.reply_text("No valid bot token found.")
 
-     bot_token = bot_token_match.group(1)
-     
      try:
-       async with self.client(bot_token, False) as _client:
+       async with self.client(bot_token) as _client:
           _bot = await _client.get_me()
      except Exception as e:
        return await msg.reply_text(f"<b>Bot Error:</b> `{e}`\n\nPlease check the token.")
@@ -77,7 +93,8 @@ class CLIENT:
      await db.add_bot(details)
      return True
     
-  async def add_session(self, bot, message):
+  async def add_session(self, bot, message: Message):
+     """Handles the conversation flow for adding a new userbot session."""
      user_id = int(message.from_user.id)
      text = "<b>A friendly heads-up!</b> (｡•̀ᴗ-)✧\n\nUsing a user account for automation can be risky. It's a good idea to use an alternate account for this.\n\nThe developer is not responsible for what happens."
      await bot.send_message(user_id, text=text)
@@ -102,48 +119,3 @@ class CLIENT:
      }
      await db.add_bot(details)
      return True
-    
-@Client.on_message(filters.private & filters.command('reset'))
-async def forward_tag(bot, m):
-    default = await db.get_configs("01")
-    await db.update_configs(m.from_user.id, default)
-    await m.reply("Settings have been reset. ✓")
-
-@Client.on_message(filters.command('resetall') & filters.user(Config.OWNER_ID))
-async def resetall(bot, message):
-  users = await db.get_all_users()
-  sts = await message.reply("Processing...")
-  TEXT = "Total: {}\nSuccess: {}\nFailed: {}\nExcept: {}"
-  total = success = failed = already = 0
-  ERRORS = []
-  async for user in users:
-      user_id = user['id']
-      default = await get_configs(user_id)
-      default['db_uri'] = None
-      total += 1
-      if total %10 == 0:
-         await sts.edit(TEXT.format(total, success, failed, already))
-      try: 
-         await db.update_configs(user_id, default)
-         success += 1
-      except Exception as e:
-         ERRORS.append(e)
-         failed += 1
-  if ERRORS:
-     await message.reply(ERRORS[:100])
-  await sts.edit("Completed\n" + TEXT.format(total, success, failed, already))
-  
-async def get_configs(user_id):
-  configs = await db.get_configs(user_id)
-  # Add default for the new forward_delay setting
-  if 'forward_delay' not in configs:
-      configs['forward_delay'] = 1.0 
-  return configs
-
-async def update_configs(user_id, key, value):
-  current = await db.get_configs(user_id)
-  if key in ['caption', 'duplicate', 'db_uri', 'forward_tag', 'protect', 'file_size', 'size_limit', 'extension', 'keywords', 'button', 'forward_delay']:
-     current[key] = value
-  else: 
-     current['filters'][key] = value
-  await db.update_configs(user_id, current)
