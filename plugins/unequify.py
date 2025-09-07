@@ -61,7 +61,9 @@ async def select_userbot_unequify(bot: Client, query: CallbackQuery):
     await unequify_continue(bot, query.message, userbot_id)
 
 async def unequify_continue(bot: Client, message: Message, userbot_id: int):
-    temp.UNEQUIFY_USERBOT_ID = userbot_id
+    user_id = message.from_user.id
+    temp.UNEQUIFY_USERBOT_ID[user_id] = userbot_id
+    
     if len(message.command) < 2:
         # Show interactive menu if no target is provided
         buttons = [
@@ -169,7 +171,10 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
             await query.message.edit_text("Cancelled.")
 
     elif data == "select_from_userbot":
-        userbot_id = temp.UNEQUIFY_USERBOT_ID
+        userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
+        if not userbot_id:
+            return await query.message.edit("Userbot selection lost. Please start over.")
+
         userbot_config = await db.get_bot(user_id, userbot_id)
         if not userbot_config or not userbot_config.get('session'):
             return await query.message.edit("Userbot not found. Please add one in /settings.")
@@ -241,7 +246,10 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
     if not range_session:
         return await status_message.edit_text("Error: Session expired or invalid.")
 
-    userbot_id = temp.UNEQUIFY_USERBOT_ID
+    userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
+    if not userbot_id:
+        return await status_message.edit_text("Error: Userbot selection lost. Please start over.")
+    
     userbot_config = await db.get_bot(user_id, userbot_id)
     if not userbot_config or not userbot_config.get('session'):
         return await status_message.edit_text("Error: Userbot not found.")
