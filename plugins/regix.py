@@ -6,7 +6,7 @@ import asyncio
 import logging
 from .utils import STS
 from database import db 
-from .test import CLIENT , start_clone_bot
+from .test import CLIENT, start_clone_bot
 from config import Config, temp
 from translation import Translation
 from pyrogram import Client, filters 
@@ -19,146 +19,140 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 @Client.on_callback_query(filters.regex(r'^start_public'))
-async def pub_(bot, message):
-    user = message.from_user.id
-    temp.CANCEL[user] = False
-    frwd_id = message.data.split("_")[2]
+async def pub_(bot, cb):
+    user_id = cb.from_user.id
+    if temp.lock.get(user_id):
+      return await cb.answer("Please wait for the previous task to complete!", show_alert=True)
     
-    if temp.lock.get(user):
-        return await message.answer("A previous task is still running.", show_alert=True)
-    
+    temp.CANCEL[user_id] = False
+    frwd_id = cb.data.split("_")[2]
     sts = STS(frwd_id)
     if not sts.verify():
-        await message.answer("This is an old button. Please start over.", show_alert=True)
-        return await message.message.delete()
-    
+      return await cb.answer("This is an old button, please start over.", show_alert=True)
+
     i = sts.get(full=True)
     if i.TO in temp.IS_FRWD_CHAT:
-        return await message.answer("A task is already running for this chat.", show_alert=True)
+      return await cb.answer("A task is already running for this target chat.", show_alert=True)
+      
+    m = await msg_edit(cb.message, "Verifying...")
+    _bot, caption, forward_tag, data_params, protect, button = await sts.get_data(user_id)
     
-    m = await msg_edit(message.message, "`Verifying...`")
-    
-    bot_id = temp.FORWARD_BOT_ID.get(user)
-    _bot, caption, forward_tag, data, protect, button = await sts.get_data(user, bot_id)
-
     if not _bot:
-        return await msg_edit(m, "No bot or userbot found. Add one in /settings.", wait=True)
-    
-    temp.lock[user] = True
-    
+      return await msg_edit(m, "You haven't added a bot/userbot. Please do so in /settings.", wait=True)
+
     try:
       client = await start_clone_bot(CLIENT.client(_bot))
     except Exception as e:  
-      temp.lock[user] = False
       return await m.edit(f"Failed to start client: {e}")
 
+    await msg_edit(m, "Processing...")
+    try: 
+       await client.get_chat(i.FROM)
+    except Exception as e:
+       await msg_edit(m, f"Error accessing source chat: {e}\n\nMake sure your bot/userbot has access.", retry_btn(frwd_id), True)
+       return await stop(client, user_id)
     try:
-        await msg_edit(m, "`Processing...`")
-        try: 
-            await client.get_chat(i.FROM)
-        except Exception as e:
-            return await msg_edit(m, f"Source chat is private or invalid. Error: {e}", retry_btn(frwd_id), True)
+       k = await client.send_message(i.TO, "Testing connection...")
+       await k.delete()
+    except Exception as e:
+       await msg_edit(m, f"Error accessing target chat: {e}\n\nMake sure your bot/userbot is an admin there.", retry_btn(frwd_id), True)
+       return await stop(client, user_id)
+
+    temp.lock[user_id] = True
+    temp.forwardings += 1
+    await db.add_frwd(user_id)
+    await send(bot, user_id, "Forwarding Started!")
+    sts.add(time=True)
+    sleep_duration = 1 if _bot['is_bot'] else 10
+    temp.IS_FRWD_CHAT.append(i.TO)
+
+    try:
+        MSG_batch = []
+        pling = 0
+        await edit(m, 'Starting...', 'running', sts)
         
-        try:
-            k = await client.send_message(i.TO, "Test...")
-            await k.delete()
-        except Exception as e:
-            return await msg_edit(m, f"Bot/userbot must be an admin in the target channel. Error: {e}", retry_btn(frwd_id), True)
-        
-        temp.forwardings += 1
-        await db.add_frwd(user)
-        await send(client, user, "Forwarding started...")
-        sts.add(time=True)
-        sleep = 1 if _bot['is_bot'] else 10
-        await msg_edit(m, "`Processing...`") 
-        temp.IS_FRWD_CHAT.append(i.TO)
+        async for message in client.iter_messages(chat_id=i.FROM, limit=i.limit, offset=i.skip):
+            if temp.CANCEL.get(user_id):
+                await is_cancelled(client, user_id, m, sts)
+                return
 
-        try:
-            MSG = []
-            pling = 0
-            await edit(m, 'Progressing', 10, sts)
-
-            # Use the patched iter_messages
-            async for message in client.iter_messages(chat_id=i.FROM, limit=i.limit, offset=i.skip):
-                if await is_cancelled(client, user, m, sts):
-                   return
-                
-                if pling % 20 == 0: 
-                   await edit(m, 'Progressing', 10, sts)
-                pling += 1
-                sts.add('fetched')
-
-                if message.empty or message.service:
-                   sts.add('deleted')
-                   continue
-                
-                if forward_tag:
-                   MSG.append(message.id)
-                   if len(MSG) >= 100: 
-                      await forward(client, MSG, m, sts, protect)
-                      sts.add('total_files', len(MSG))
-                      await asyncio.sleep(10)
-                      MSG = []
-                else:
-                   new_caption = custom_caption(message, caption)
-                   details = {"msg_id": message.id, "media": media(message), "caption": new_caption, 'button': button, "protect": protect}
-                   await copy(client, details, m, sts)
-                   sts.add('total_files')
-                   await asyncio.sleep(sleep)
+            pling += 1
+            if pling % 20 == 0: 
+               await edit(m, 'Progressing', 'running', sts)
             
-            if forward_tag and MSG:
-                await forward(client, MSG, m, sts, protect)
-                sts.add('total_files', len(MSG))
+            sts.add('fetched')
+            
+            if message.empty or message.service:
+               sts.add('deleted')
+               continue
 
-        except Exception as e:
-            await msg_edit(m, f'<b>Error:</b>\n<code>{e}</code>', wait=True)
-        
-        await send(client, user, "Forwarding complete. ✓")
-        await edit(m, 'Completed', "completed", sts)
+            if forward_tag:
+               MSG_batch.append(message.id)
+               if len(MSG_batch) >= 100:
+                  await forward(client, MSG_batch, m, sts, protect)
+                  sts.add('total_files', len(MSG_batch))
+                  await asyncio.sleep(10)
+                  MSG_batch = []
+            else:
+               new_caption = custom_caption(message, caption)
+               details = {"msg_id": message.id, "media": media(message), "caption": new_caption, 'button': button, "protect": protect}
+               await copy(client, details, m, sts)
+               sts.add('total_files')
+               await asyncio.sleep(sleep_duration) 
 
+        if forward_tag and MSG_batch:
+            await forward(client, MSG_batch, m, sts, protect)
+            sts.add('total_files', len(MSG_batch))
+
+        await send(bot, user_id, "Forwarding Completed!")
+        await edit(m, 'Completed', 'completed', sts) 
+    
+    except Exception as e:
+        logger.error(f"Forwarding error: {e}", exc_info=True)
+        await msg_edit(m, f'<b>An error occurred:</b>\n<code>{e}</code>', wait=True)
+    
     finally:
         if i.TO in temp.IS_FRWD_CHAT:
             temp.IS_FRWD_CHAT.remove(i.TO)
-        await stop(client, user)
+        await stop(client, user_id)
 
+# --- Helper functions (copy, forward, etc.) ---
 async def copy(bot, msg, m, sts):
-   try:                                  
-     if msg.get("media") and msg.get("caption"):
-        await bot.send_cached_media(
-              chat_id=sts.get('TO'),
-              file_id=msg.get("media"),
-              caption=msg.get("caption"),
-              reply_markup=msg.get('button'),
-              protect_content=msg.get("protect"))
-     else:
+   try:
+     if msg.get("media"):
         await bot.copy_message(
               chat_id=sts.get('TO'),
-              from_chat_id=sts.get('FROM'),    
-              caption=msg.get("caption"),
+              from_chat_id=sts.get('FROM'),
               message_id=msg.get("msg_id"),
+              caption=msg.get("caption"),
               reply_markup=msg.get('button'),
-              protect_content=msg.get("protect"))
+              protect_content=msg.get("protect", False))
+     else: # For text messages
+        await bot.send_message(
+              chat_id=sts.get('TO'),
+              text=msg.get("text"),
+              reply_markup=msg.get('button'),
+              protect_content=msg.get("protect", False)
+        )
    except FloodWait as e:
-     await edit(m, 'Progressing', e.value, sts)
+     await edit(m, f'Sleeping: {e.value}s', 'floodwait', sts)
      await asyncio.sleep(e.value)
-     await edit(m, 'Progressing', 10, sts)
      await copy(bot, msg, m, sts)
    except Exception as e:
-     print(e)
+     logger.warning(f"Failed to copy message {msg.get('msg_id')}: {e}")
      sts.add('deleted')
         
-async def forward(bot, msg, m, sts, protect):
+async def forward(bot, msg_ids, m, sts, protect):
    try:                             
      await bot.forward_messages(
            chat_id=sts.get('TO'),
            from_chat_id=sts.get('FROM'), 
            protect_content=protect,
-           message_ids=msg)
+           message_ids=msg_ids)
    except FloodWait as e:
-     await edit(m, 'Progressing', e.value, sts)
+     await edit(m, f'Sleeping: {e.value}s', 'floodwait', sts)
      await asyncio.sleep(e.value)
-     await edit(m, 'Progressing', 10, sts)
-     await forward(bot, msg, m, sts, protect)
+     await forward(bot, msg_ids, m, sts, protect)
 
 async def msg_edit(msg, text, button=None, wait=None):
     try:
@@ -172,94 +166,74 @@ async def msg_edit(msg, text, button=None, wait=None):
 
 async def edit(msg, title, status, sts):
    i = sts.get(full=True)
-   status = 'Forwarding' if status == 10 else f"Sleeping {status}s" if str(status).isnumeric() else status
-   percentage = "{:.0f}".format(float(i.fetched)*100/float(i.total)) if i.total > 0 else "0"
-   
-   now = time.time()
-   diff = int(now - i.start) if i.start > 0 else 1
-   speed = sts.divide(i.fetched, diff)
+   percentage = "{:.0f}".format(i.fetched * 100 / i.total) if i.total > 0 else "0"
    progress = "▰{0}{1}".format(
-       ''.join(["▰" for _ in range(math.floor(int(percentage) / 10))]),
-       ''.join(["▱" for _ in range(10 - math.floor(int(percentage) / 10))]))
+       '▰' * math.floor(int(percentage) / 10),
+       '▱' * (10 - math.floor(int(percentage) / 10)))
    
    text = Translation.TEXT.format(
-        fetched=i.fetched,
-        forwarded=i.total_files,
-        duplicate=i.duplicate,
-        deleted=i.deleted,
-        skipped=i.skip,
-        filtered=i.filtered,
-        status=status,
-        percentage=percentage,
-        progress_bar=progress
-    )
-
+       fetched=i.fetched, total=i.total,
+       forwarded=i.total_files, duplicate=i.duplicate,
+       deleted=i.deleted + i.filtered, status=status,
+       percentage=percentage, progress_bar=progress,
+       skipped=i.skip, # Added skipped to format
+       filtered=i.filtered
+   )
+   
    button = None
    if status not in ["cancelled", "completed"]:
-      button = InlineKeyboardMarkup([[InlineKeyboardButton('« Cancel', 'terminate_frwd')]])
-
+      button = InlineKeyboardMarkup([[InlineKeyboardButton('Cancel', 'terminate_frwd')]])
+   
    await msg_edit(msg, text, button)
    
 async def is_cancelled(client, user, msg, sts):
-   if temp.CANCEL.get(user)==True:
-      if sts.TO in temp.IS_FRWD_CHAT:
-          temp.IS_FRWD_CHAT.remove(sts.TO)
-      await edit(msg, "Cancelled", "completed", sts)
-      await send(client, user, "Forwarding process cancelled. ❌")
-      await stop(client, user)
-      return True 
-   return False 
+    if temp.CANCEL.get(user):
+        await edit(msg, "Cancelled", "cancelled", sts)
+        await send(client, user, "❌ Forwarding Process Cancelled")
+        return True
+    return False
 
-async def stop(client, user):
+async def stop(client, user_id):
    try:
      await client.stop()
-   except:
-     pass 
-   await db.rmve_frwd(user)
+   except: pass 
+   await db.rmve_frwd(user_id)
    if temp.forwardings > 0:
        temp.forwardings -= 1
-   temp.lock[user] = False 
+   temp.lock[user_id] = False 
     
 async def send(bot, user, text):
    try:
       await bot.send_message(user, text=text)
-   except:
-      pass 
+   except: pass 
      
 def custom_caption(msg, caption):
   if not caption or not msg.media:
-    return getattr(msg, 'caption', '') or ''
-  
+      return (msg.caption or "").html if msg.caption else ""
+
   media = getattr(msg, msg.media.value, None)
   if not media:
-    return getattr(msg, 'caption', '') or ''
-
+      return (msg.caption or "").html if msg.caption else ""
+      
   file_name = getattr(media, 'file_name', '')
   file_size = get_size(getattr(media, 'file_size', 0))
-  fcaption = getattr(msg, 'caption', '')
-  if fcaption:
-      fcaption = fcaption.html
+  fcaption = (msg.caption or "").html if msg.caption else ""
   
   return caption.format(filename=file_name, size=file_size, caption=fcaption)
 
 def get_size(size):
   try:
-    units = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB"]
+    units = ["Bytes", "KB", "MB", "GB", "TB"]
     size = float(size)
     i = 0
-    while size >= 1024.0 and i < len(units):
+    while size >= 1024.0 and i < len(units) - 1:
         i += 1
         size /= 1024.0
-    return "%.2f %s" % (size, units[i])
-  except:
-    return "N/A"
+    return f"{size:.2f} {units[i]}"
+  except: return "N/A"
 
 def media(msg):
-  if msg.media:
-     media = getattr(msg, msg.media.value, None)
-     if media:
-        return getattr(media, 'file_id', None)
-  return None 
+  return getattr(getattr(msg, msg.media.value, None), 'file_id', None)
 
 def retry_btn(id):
     return InlineKeyboardMarkup([[InlineKeyboardButton('Retry', f"start_public_{id}")]])
@@ -267,15 +241,5 @@ def retry_btn(id):
 @Client.on_callback_query(filters.regex(r'^terminate_frwd$'))
 async def terminate_frwding(bot, m):
     user_id = m.from_user.id 
-    temp.lock[user_id] = False
     temp.CANCEL[user_id] = True 
     await m.answer("Cancelling...", show_alert=True)
-                  
-@Client.on_callback_query(filters.regex(r'^close_btn$'))
-async def close(bot, update):
-    await update.answer()
-    await update.message.delete()
-    try:
-        await update.message.reply_to_message.delete()
-    except:
-        pass
