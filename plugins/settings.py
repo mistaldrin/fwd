@@ -7,7 +7,7 @@ from .test import CLIENT
 from database import db
 from config import temp
 from translation import Translation
-from pyrogram import Client, filters, enums
+from pyrogram import Client, filters, enums, continue_propagation
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from pyrogram.enums import ChatMemberStatus, ParseMode
 from pyrogram.errors import FloodWait, ChannelInvalid, UsernameNotOccupied, UsernameInvalid, PeerIdInvalid, UserNotParticipant
@@ -148,7 +148,7 @@ async def source_chat_handler(bot: Client, message: Message):
     user_state = temp.USER_STATES.get(user_id)
 
     if not user_state or user_state.get("state") != "awaiting_source_chat":
-        return
+        raise continue_propagation()
 
     to_chat_id = user_state["to_chat_id"]
     bot_id = temp.FORWARD_BOT_ID.get(user_id)
