@@ -8,7 +8,6 @@
 import asyncio
 import logging 
 import logging.config
-import sys
 from database import db 
 from config import Config  
 from aiohttp import web
@@ -42,9 +41,9 @@ class Bot(Client):
         try:
             await super().start()
         except FloodWait as e:
-            self.log.warning(f"Telegram is asking to wait for {e.value} seconds. Exiting now.")
-            # Exit gracefully to allow the deploy service to handle restarts correctly.
-            sys.exit(1)
+            self.log.warning(f"FloodWait on start: waiting for {e.value} seconds.")
+            await asyncio.sleep(e.value)
+            await super().start() # Retry start after waiting
             
         me = await self.get_me()
         logging.info(f"{me.first_name} with for pyrogram v{__version__} (Layer {layer}) started on @{me.username}.")
@@ -52,34 +51,16 @@ class Bot(Client):
         self.username = me.username
         self.first_name = me.first_name
         self.set_parse_mode(ParseMode.DEFAULT)
-        text = "**ʙᴏᴛ ʀᴇꜱᴛᴀʀᴛᴇᴅ!**"
-        logging.info(text)
-        success = failed = 0
-        users = await db.get_all_frwd()
+        
+        # Start the web server
         app = web.AppRunner(await web_server())
         await app.setup()
         bind_address = "0.0.0.0"
         await web.TCPSite(app, bind_address, PORT).start()
         
+        # Keep the bot running
         await idle()
-        logging.info("OK")
-        async for user in users:
-           chat_id = user['user_id']
-           try:
-              await self.send_message(chat_id, text)
-              success += 1
-           except FloodWait as e:
-              await asyncio.sleep(e.value + 5)
-              await self.send_message(chat_id, text)
-              success += 1
-           except Exception:
-              failed += 1 
-    #    await self.send_message("venombotsupport", text)
-        if (success + failed) != 0:
-           await db.rmve_frwd(all=True)
-           logging.info(f"Restart message status"
-                 f"success: {success}"
-                 f"failed: {failed}")
+        logging.info("Bot has stopped.")
 
     async def stop(self, *args):
         msg = f"@{self.username} stopped. Bye."
