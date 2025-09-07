@@ -18,6 +18,7 @@ class Translation(object):
 ⏣ __/ubclist - Lɪꜱᴛ Cʜᴀᴛꜱ Fʀᴏᴍ Yᴏᴜʀ Usᴇʀʙᴏᴛ__
 ⏣ __/settings - Cᴏɴꜰɪɢᴜʀᴇ Yᴏᴜʀ Sᴇᴛᴛɪɴɢꜱ__
 ⏣ __/reset - Rᴇꜱᴇᴛ Yᴏᴜʀ Sᴇᴛᴛɪɴɢꜱ__
+⏣ __/resetme - Rᴇsᴇᴛ Yᴏᴜʀ Pᴇʀsᴏɴᴀʟ Cᴏɴꜰɪɢᴜʀᴀᴛɪᴏɴ__
 ⏣ __/forwardelay - Sᴇᴛ ᴀ ᴄᴜꜱᴛᴏᴍ ꜰᴏʀᴡᴀʀᴅɪɴɢ ᴅᴇʟᴀʏ__
 
 <b><u>≬≬ Fᴇᴀᴛᴜʀᴇꜱ :</b></u>
@@ -116,3 +117,5 @@ Use this command to set a custom delay (in seconds) between forwarded messages t
 <b>Example:</b> <code>/forwardelay 2</code> (sets a two-second delay)
 
 The default delay is 1 second."""
+
+}
