@@ -8,7 +8,7 @@
 import asyncio
 import logging 
 import logging.config
-from database import db 
+# The 'db' import is removed from here to prevent circular dependencies
 from config import Config  
 from aiohttp import web
 from plugins import web_server
