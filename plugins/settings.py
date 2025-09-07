@@ -3,7 +3,8 @@ from database import db
 from config import Config
 from translation import Translation
 from pyrogram import Client, filters
-from .test import get_configs, update_configs, CLIENT, parse_buttons
+from .test import get_configs, update_configs, CLIENT
+from .utils import parse_buttons
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 CLIENT = CLIENT()
@@ -579,4 +580,4 @@ async def next_filters_buttons(user_id):
        InlineKeyboardButton('⇇ Bᴀᴄᴋ', 
                     callback_data="settings#main")
        ]]
-  return InlineKeyboardMarkup(buttons) 
+  return InlineKeyboardMarkup(buttons)
