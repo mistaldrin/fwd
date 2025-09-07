@@ -37,8 +37,16 @@ async def settings_query(bot, query):
        buttons = []
        bots = await db.get_bots(user_id)
        for _bot in bots:
-          bot_name = _bot.get('name', 'Unnamed Bot')
           bot_id = _bot.get('id')
+          # If there's no ID, we can't interact with the bot. Skip it to prevent errors.
+          if not bot_id:
+              continue
+
+          bot_name = _bot.get('name')
+          if not bot_name:
+              username = _bot.get('username')
+              bot_name = f"@{username}" if username else f"Unnamed Bot (ID: {bot_id})"
+          
           buttons.append([InlineKeyboardButton(bot_name,
                            callback_data=f"settings#editbot_{bot_id}")])
 
@@ -117,7 +125,13 @@ async def settings_query(bot, query):
            await text.edit_text('Pʀᴏᴄᴇꜱꜱ Hᴀꜱ Bᴇᴇɴ Cᴀɴᴄᴇʟʟᴇᴅ Aᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ Dᴜᴇ Tᴏ Nᴏ Rᴇꜱᴩᴏɴꜱᴇ!', reply_markup=InlineKeyboardMarkup(buttons))
 
     elif type.startswith("editbot"):
-       bot_id = int(type.split('_')[1])
+       try:
+           bot_id_str = type.split('_')[1]
+           bot_id = int(bot_id_str)
+       except (IndexError, ValueError):
+           await query.message.edit_text("Error: Invalid bot ID.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data="settings#bots")]]))
+           return
+
        _bot = await db.get_bot(user_id, bot_id)
        if not _bot:
            await query.message.edit_text("Bot configuration not found. It might have been removed.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('⇇ Bᴀᴄᴋ', callback_data="settings#bots")]]))
