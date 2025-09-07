@@ -77,6 +77,22 @@ class Database:
 
     async def delete_user(self, user_id):
         await self.col.delete_many({'id': int(user_id)})
+        
+    async def reset_user_data(self, user_id):
+        """ Resets a user's entire configuration to default. """
+        # Delete user's main config, bots, and channels
+        await self.col.delete_many({'id': int(user_id)})
+        await self.bot.delete_many({'user_id': int(user_id)})
+        await self.chl.delete_many({'user_id': int(user_id)})
+        
+        # Re-add the user with a fresh document
+        user = await self.is_user_exist(user_id)
+        if not user:
+             # This part is for re-adding the user, you might need to get their first name again
+             # For simplicity, we can just re-add with their ID.
+             # In a real scenario, you'd prompt them to /start again.
+             await self.add_user(user_id, str(user_id))
+
 
     async def get_banned(self):
         users = self.col.find({'ban_status.is_banned': True})
@@ -112,8 +128,19 @@ class Database:
         }
         user = await self.col.find_one({'id':int(id)})
         if user:
-            return user.get('configs', default)
+            # Merge stored configs with default to prevent KeyErrors on missing keys
+            user_configs = user.get('configs', {})
+            # The default dictionary is the base
+            final_configs = default.copy()
+            # Update with user's saved settings
+            final_configs.update(user_configs)
+            # Ensure nested 'filters' dictionary is also merged
+            if 'filters' in user_configs:
+                final_configs['filters'] = default['filters'].copy()
+                final_configs['filters'].update(user_configs['filters'])
+            return final_configs
         return default
+
 
     async def add_bot(self, datas):
        await self.bot.insert_one(datas)
