@@ -10,7 +10,7 @@ Select 'Help' for a list of commands.
 (o･ω･o)"""
 
 
-  HELP_TXT = """<b>❖ Help Menu ❖</b>
+  HELP_TXT = """<b>֎ Help Menu ֎</b>
 
 Available commands:
 
@@ -30,7 +30,7 @@ Available commands:
 ▸ Skips duplicates automatically.
 """
   
-  HOW_USE_TXT = """<b>❖ How to Use ❖</b>
+  HOW_USE_TXT = """<b>֎ How to Use ֎</b>
 
 A quick checklist to get started:
 
@@ -42,14 +42,14 @@ A quick checklist to get started:
 
 Ready? Use /forward to begin. (ﾉ´ヮ`)ﾉ*:･ﾟ✧"""
   
-  ABOUT_TXT = """<b>❖ About ❖</b>
+  ABOUT_TXT = """<b>֎ About ֎</b>
 
 ● <b>Name:</b> {}
 ● <b>Language:</b> Python
 ● <b>Library:</b> Pyrogram
 ● <b>Developer:</b> <a href='https://t.me/partDevil'>partDevil</a>"""
   
-  STATUS_TXT = """<b>❖ Bot Status ❖</b>
+  STATUS_TXT = """<b>֎ Bot Status ֎</b>
   
 ● <b>Total Users:</b> <code>{}</code>
 ● <b>Total Bots & Userbots:</b> <code>{}</code>
@@ -59,23 +59,23 @@ Ready? Use /forward to begin. (ﾉ´ヮ`)ﾉ*:･ﾟ✧"""
   FROM_MSG = "<b>Source Chat?</b>\n\nForward the last message or send a message link.\n\n/cancel - Abort mission."
   TO_MSG = "<b>Target Chat?</b>\n\nSelect a target chat from the buttons below.\n\n/cancel - Abort mission."
   
-  RANGE_SELECTION_TXT = """<b>❖ Message Range ❖</b>
+  RANGE_SELECTION_TXT = """<b>֎ Message Range ֎</b>
 
 Forward all messages or define a custom range below.
 
 <i>Note: Large channels can take a while. Patience is a virtue.</i>"""
 
-  UNEQUIFY_START_TXT = """<b>❖ Deduplicator ❖</b>
+  UNEQUIFY_START_TXT = """<b>֎ Deduplicator ֎</b>
 
 Select the target channel.
 
 Manual input: `/unequify [channel_username]`"""
   
   CANCEL = "Process cancelled. (o˘◡˘o)"
-  BOT_DETAILS = "<b>❖ Bot Details ❖</b>\n\n● <b>Name:</b> <code>{}</code>\n● <b>ID:</b> <code>{}</code>\n● <b>Username:</b> {}"
-  USER_DETAILS = "<b>❖ Userbot Details ❖</b>\n\n● <b>Name:</b> <code>{}</code>\n● <b>ID:</b> <code>{}</code>\n● <b>Username:</b> {}"  
+  BOT_DETAILS = "<b>֎ Bot Details ֎</b>\n\n● <b>Name:</b> <code>{}</code>\n● <b>ID:</b> <code>{}</code>\n● <b>Username:</b> {}"
+  USER_DETAILS = "<b>֎ Userbot Details ֎</b>\n\n● <b>Name:</b> <code>{}</code>\n● <b>ID:</b> <code>{}</code>\n● <b>Username:</b> {}"  
          
-  TEXT = """<b>❖ Forwarding Status ❖</b>
+  TEXT = """<b>֎ Forwarding Status ֎</b>
 
 ● <b>Total in Range:</b> <code>{total}</code>
 ● <b>Processed:</b> <code>{fetched}</code>
@@ -88,7 +88,7 @@ Manual input: `/unequify [channel_username]`"""
 {progress_bar}
 """
 
-  DUPLICATE_TEXT = """<b>❖ Deduplication Status ❖</b>
+  DUPLICATE_TEXT = """<b>֎ Deduplication Status ֎</b>
 
 ● <b>Total in Range:</b> <code>{total}</code>
 ● <b>Messages Scanned:</b> <code>{scanned}</code>
@@ -96,7 +96,7 @@ Manual input: `/unequify [channel_username]`"""
 
 {progress}
 """
-  DOUBLE_CHECK = """<b>❖ Final Check ❖</b>
+  DOUBLE_CHECK = """<b>֎ Final Check ֎</b>
 
 Here's the plan:
 
@@ -109,7 +109,7 @@ Here's the plan:
 
 <b>Proceed?</b>"""
   
-  FORWARDELAY_TXT = """<b>❖ Forward Delay ❖</b>
+  FORWARDELAY_TXT = """<b>֎ Forward Delay ֎</b>
 
 Set a custom delay between forwards. Helps avoid API limits.
 
