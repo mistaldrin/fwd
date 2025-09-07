@@ -140,7 +140,7 @@ async def list_userbot_chats(bot: Client, message: Message, user_id: int, userbo
 
     sts = await message.reply("`⏳ Fetching chat list...`")
 
-    chat_list_text = "<b>❖ Userbot Chat List ❖</b>\n\n✓ indicates delete permissions.\n• indicates no permissions.\n\n"
+    chat_list_text = "<b>֎ Userbot Chat List ֎</b>\n\n✓ indicates delete permissions.\n• indicates no permissions.\n\n"
 
     try:
         session_string = userbot_config['session']
