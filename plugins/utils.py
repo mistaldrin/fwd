@@ -7,12 +7,10 @@
 import re
 import time as tm
 from database import db 
-from config import temp, Config
+from config import temp
 from uuid import uuid4
-from functools import wraps
 from translation import Translation
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from pyrogram.errors import UserNotParticipant
 
 STATUS = {}
 
@@ -192,49 +190,3 @@ async def update_range_message(bot, session_id, message=None):
             session['message_id'] = sent_message.id
     except Exception as e:
         print(f"Error updating range message: {e}")
-
-
-def force_subscribe(func):
-    """
-    A decorator to check if a user is subscribed to the required channel.
-    """
-    @wraps(func)
-    async def wrapper(client, update):
-        if not Config.FORCE_SUB_CHANNEL:
-            return await func(client, update)
-        
-        user_id = update.from_user.id
-        if user_id in Config.OWNER_ID:
-            return await func(client, update)
-
-        try:
-            member = await client.get_chat_member(Config.FORCE_SUB_CHANNEL, user_id)
-            if member.status in ["kicked", "left"]:
-                raise UserNotParticipant
-        except UserNotParticipant:
-            try:
-                invite_link = await client.export_chat_invite_link(Config.FORCE_SUB_CHANNEL)
-            except Exception as e:
-                print(f"Couldn't get invite link for {Config.FORCE_SUB_CHANNEL}: {e}")
-                invite_link = f"https://t.me/{Config.FORCE_SUB_CHANNEL}"
-                
-            text = "Yᴏᴜ Mᴜꜱᴛ Jᴏɪɴ Mʏ Cʜᴀɴɴᴇʟ Tᴏ Uꜱᴇ Mᴇ. Cʟɪᴄᴋ Oɴ Tʜᴇ Bᴜᴛᴛᴏɴ Bᴇʟᴏᴡ Tᴏ Jᴏɪɴ"
-            buttons = [
-                [InlineKeyboardButton("Jᴏɪɴ Cʜᴀɴɴᴇʟ", url=invite_link)],
-                [InlineKeyboardButton("🔄 Tʀʏ Aɢᴀɪɴ 🔄", callback_data="check_subscription")]
-            ]
-
-            # Determine if it's a message or callback query to reply correctly
-            if hasattr(update, 'message'): # CallbackQuery
-                await update.message.edit(text, reply_markup=InlineKeyboardMarkup(buttons))
-                await update.answer("Please join the channel first.", show_alert=True)
-            else: # Message
-                await update.reply(text, reply_markup=InlineKeyboardMarkup(buttons))
-            return
-        except Exception as e:
-            print(f"Force subscribe error: {e}")
-            # Allow command to proceed if there's an unexpected error
-            return await func(client, update)
-            
-        return await func(client, update)
-    return wrapper
