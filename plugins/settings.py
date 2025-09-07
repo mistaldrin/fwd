@@ -11,6 +11,13 @@ CLIENT = CLIENT()
 
 @Client.on_message(filters.private & filters.command(['settings']))
 async def settings(client, message):
+    user_id = message.from_user.id
+
+    # Explicitly check if the user is banned
+    ban_status = await db.get_ban_status(user_id)
+    if ban_status["is_banned"]:
+        return await message.reply_text(f"You are banned from using this bot.\n\nReason: {ban_status['ban_reason']}")
+
     text="<b>Cʜᴀɴɢᴇ Yᴏᴜʀ Sᴇᴛᴛɪɴɢꜱ Aꜱ Pᴇʀ Yᴏᴜʀ Nᴇᴇᴅꜱ! ❄️</b>"
     await message.reply_text(
         text=text,
