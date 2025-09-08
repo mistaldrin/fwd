@@ -52,7 +52,7 @@ def parse_buttons(text, markup=True):
     return buttons if buttons else None
 
 async def start_clone_bot(FwdBot, data=None):
-   """Starts the client and patches the iter_messages method."""
+   """Starts the client."""
    await FwdBot.start()
    return FwdBot
 
@@ -117,7 +117,8 @@ class CLIENT:
         msg = await bot.ask(chat_id=user_id, text=SESSION_STRING_TEXT, timeout=300)
 
         if msg.text and msg.text.lower() == '/cancel':
-           return await msg.reply('Process cancelled.')
+           await msg.reply('Process cancelled.')
+           return False
         elif not msg.text or len(msg.text) < SESSION_STRING_SIZE:
            return await msg.reply('Not a valid session string.')
 
