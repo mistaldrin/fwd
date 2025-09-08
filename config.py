@@ -15,7 +15,6 @@ class Config:
     PORT = os.environ.get("PORT", "8080")
     DB_NAME = os.environ.get("DB_NAME", "cluster0")
     OWNER_ID = [int(id) for id in os.environ.get("OWNER_ID", '').split()]
-    SUDO_USERS = [int(id) for id in os.environ.get("SUDO_USERS", '').split()]
 
 
 class temp(object): 
@@ -26,8 +25,12 @@ class temp(object):
     IS_FRWD_CHAT = []
     # Dictionaries for managing interactive sessions
     RANGE_SESSIONS = {}
-    USER_STATES = {}
+    USER_STATES = {} # For stateful conversations
+    UNEQUIFY_SESSIONS = {}
+    USERBOT_CHATS_CACHE = {}
+    # User-specific bot selections for concurrent operations
     FORWARD_BOT_ID = {}
+    UNEQUIFY_USERBOT_ID = {}
 
 
 
