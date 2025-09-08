@@ -62,8 +62,7 @@ async def pub_(bot, cb):
 
     temp.lock[user_id] = True
     temp.forwardings += 1
-    await db.add_frwd(user_id)
-    await send(bot, user_id, "Forwarding Started!")
+    # No longer sends "Forwarding Started!" here
     
     sleep_duration = data_params.get('forward_delay', 1.0)
     last_edit_time = time.time()
@@ -87,7 +86,7 @@ async def pub_(bot, cb):
         if i.start_id < i.end_id:
             messages_to_process.reverse()
         
-        # Initial Progress Message
+        # First progress message is sent here, after fetching is done.
         await edit_progress(m, sts, "running")
 
         MSG_batch = []
@@ -126,7 +125,6 @@ async def pub_(bot, cb):
             await forward(client, MSG_batch, m, sts, protect)
             sts.add('total_files', len(MSG_batch))
 
-        await send(bot, user_id, "Forwarding Completed!")
         await edit_progress(m, sts, "completed") 
     
     except Exception as e:
@@ -234,10 +232,10 @@ async def edit_progress(msg, sts, status):
    
     await msg_edit(msg, text, button)
    
-async def is_cancelled(client, user, msg, sts, task_id):
+async def is_cancelled(client, user_id, msg, sts, task_id):
     if temp.CANCEL.get(task_id):
         await edit_progress(msg, sts, "cancelled")
-        await send(bot, user, "❌ Forwarding Process Cancelled")
+        await send(bot, user_id, "❌ Forwarding Process Cancelled")
         return True
     return False
 
@@ -262,9 +260,10 @@ async def send(bot, user, text):
      
 def custom_caption(msg, caption):
     if not msg: return ""
-    # This function now safely handles text-only messages
-    if not msg.media:
+    if not msg.media and not caption:
         return (msg.text or "").html if msg.text else ""
+    if not msg.media and caption:
+        return caption.format(filename="", size="", caption=(msg.text or "").html)
 
     media = getattr(msg, msg.media.value, None)
     if not media:
@@ -292,8 +291,7 @@ def get_size(size):
   except: return "N/A"
 
 def media(msg):
-    # Safely get file_id
-    if msg and msg.media:
+    if msg and msg.media and hasattr(msg, 'media') and hasattr(msg.media, 'value'):
         media_obj = getattr(msg, msg.media.value, None)
         if media_obj:
             return getattr(media_obj, 'file_id', None)
