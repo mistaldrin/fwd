@@ -1,3 +1,9 @@
+# MrSyD
+# Telegram Channel @Bot_Cracker
+# Developer @syd_xyz
+
+
+
 import os
 
 class Config:
@@ -12,7 +18,7 @@ class Config:
 
 
 class temp(object): 
-    lock = {} # Global user-specific task lock
+    lock = {}
     CANCEL = {}
     forwardings = 0
     BANNED_USERS = []
@@ -25,3 +31,15 @@ class temp(object):
     # User-specific bot selections for concurrent operations
     FORWARD_BOT_ID = {}
     UNEQUIFY_USERBOT_ID = {}
+
+
+
+
+
+
+
+
+
+# MrSyD
+# Telegram Channel @Bot_Cracker
+# Developer @syd_xyz
