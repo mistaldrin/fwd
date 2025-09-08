@@ -62,7 +62,6 @@ async def pub_(bot, cb):
 
     temp.lock[user_id] = True
     temp.forwardings += 1
-    # No longer sends "Forwarding Started!" here
     
     sleep_duration = data_params.get('forward_delay', 1.0)
     last_edit_time = time.time()
@@ -86,14 +85,13 @@ async def pub_(bot, cb):
         if i.start_id < i.end_id:
             messages_to_process.reverse()
         
-        # First progress message is sent here, after fetching is done.
         await edit_progress(m, sts, "running")
 
         MSG_batch = []
         
         for message in messages_to_process:
             if temp.CANCEL.get(frwd_id):
-                await is_cancelled(client, user_id, m, sts, frwd_id)
+                await is_cancelled(bot, user_id, m, sts, frwd_id)
                 return
 
             sts.add('fetched')
@@ -225,14 +223,15 @@ async def edit_progress(msg, sts, status):
           [InlineKeyboardButton('❌ Cancel ❌', f'cancel_task_{i.id}')]
         ])
     else:
-        # Final message has no buttons
-        text = f"✅ **Task Completed!**\n\n**Processed:** `{i.fetched}`\n**Forwarded:** `{i.total_files}`"
+        final_text = f"✅ **Task Completed!**\n\n**Processed:** `{i.fetched}`\n**Forwarded:** `{i.total_files}`"
         if status == "cancelled":
-            text = "❌ **Task Cancelled!**"
+            final_text = "❌ **Task Cancelled!**"
+        await msg_edit(msg, final_text)
+        return
    
     await msg_edit(msg, text, button)
    
-async def is_cancelled(client, user_id, msg, sts, task_id):
+async def is_cancelled(bot, user_id, msg, sts, task_id):
     if temp.CANCEL.get(task_id):
         await edit_progress(msg, sts, "cancelled")
         await send(bot, user_id, "❌ Forwarding Process Cancelled")
@@ -265,7 +264,7 @@ def custom_caption(msg, caption):
     if not msg.media and caption:
         return caption.format(filename="", size="", caption=(msg.text or "").html)
 
-    media = getattr(msg, msg.media.value, None)
+    media = getattr(msg, msg.media.value, None) if msg.media else None
     if not media:
         return (msg.caption or "").html if msg.caption else ""
       
