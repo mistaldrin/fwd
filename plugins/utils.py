@@ -85,10 +85,10 @@ class STS:
         return bot, configs['caption'], configs['forward_tag'], {
             'filters': filters, 'keywords': configs['keywords'],
             'media_size': size, 'extensions': configs['extension'],
-            'skip_duplicate': duplicate
+            'skip_duplicate': duplicate, 'forward_delay': configs.get('forward_delay', 1.0)
         }, configs['protect'], button
 
-async def start_range_selection(bot, message, from_chat_id, from_title, to_chat_id, start_id, end_id):
+async def start_range_selection(bot, message, from_chat_id, from_title, to_chat_id, start_id, end_id, final_callback_prefix="fwd_final"):
     """Initiates an interactive message range selection process."""
     session_id = str(uuid4())
     temp.RANGE_SESSIONS[session_id] = {
@@ -99,7 +99,8 @@ async def start_range_selection(bot, message, from_chat_id, from_title, to_chat_
         'to_chat_id': to_chat_id,
         'start_id': start_id,
         'end_id': end_id,
-        'order': 'asc' # Default order
+        'order': 'asc',
+        'final_callback': final_callback_prefix
     }
     await update_range_message(bot, session_id)
 
@@ -112,21 +113,21 @@ async def update_range_message(bot, session_id, message=None):
     text = Translation.RANGE_SELECTION_TXT
     display_button_text = f"Range: {session['start_id']} ➔ {session['end_id']} ({order_text})"
 
+    confirm_cb = f"range_confirm_{session['final_callback']}_{session_id}"
+
     buttons = [
-        [InlineKeyboardButton(display_button_text, callback_data="range_info")],
+        [InlineKeyboardButton(display_button_text, callback_data=f"range_info_{session_id}")],
         [InlineKeyboardButton("✎ Edit Start", callback_data=f"range_edit_start_{session_id}"),
          InlineKeyboardButton("✎ Edit End", callback_data=f"range_edit_end_{session_id}")],
         [InlineKeyboardButton("⇄ Swap Order", callback_data=f"range_swap_{session_id}")],
-        [InlineKeyboardButton("✓ Confirm Range", callback_data=f"range_confirm_{session_id}")],
+        [InlineKeyboardButton("✓ Confirm Range", callback_data=confirm_cb)],
         [InlineKeyboardButton("« Cancel", callback_data=f"range_cancel_{session_id}")]
     ]
 
     reply_markup = InlineKeyboardMarkup(buttons)
     try:
-        if message:
-             await message.edit_caption(caption=text, reply_markup=reply_markup)
-        else:
-            await bot.send_photo(chat_id=session['chat_id'], photo=random.choice(SYD),
-                             caption=text, reply_markup=reply_markup, quote=True)
+        photo_message = await bot.send_photo(chat_id=session['chat_id'], photo=random.choice(SYD),
+                                         caption=text, reply_markup=reply_markup, quote=True)
+        session['message_id'] = photo_message.id
     except Exception as e:
         logger.error(f"Error sending range message: {e}", exc_info=True)
