@@ -8,7 +8,7 @@ from database import db
 from config import temp
 from translation import Translation
 from pyrogram import Client, filters, enums
-from pyrogram.errors import StopPropagation
+from pyrogram.exceptions import StopPropagation
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 
 logger = logging.getLogger(__name__)
