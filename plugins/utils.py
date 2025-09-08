@@ -14,6 +14,8 @@ SYD = ["https://files.catbox.moe/3lwlbm.png"]
 logger = logging.getLogger(__name__)
 
 def get_readable_time(seconds: int) -> str:
+    if seconds == 0:
+        return "0s"
     result = ""
     (days, remainder) = divmod(seconds, 86400)
     days = int(days)
@@ -110,7 +112,10 @@ async def update_range_message(bot, session_id, message=None):
     if not session: return
 
     order_text = "Oldest ➔ Newest" if session['order'] == 'asc' else "Newest ➔ Oldest"
-    text = Translation.RANGE_SELECTION_TXT
+    text = Translation.RANGE_SELECTION_TXT.format(
+        start=min(session['start_id'], session['end_id']), 
+        end=max(session['start_id'], session['end_id'])
+    )
     display_button_text = f"Range: {session['start_id']} ➔ {session['end_id']} ({order_text})"
 
     confirm_cb = f"range_confirm_{session['final_callback']}_{session_id}"
@@ -123,11 +128,16 @@ async def update_range_message(bot, session_id, message=None):
         [InlineKeyboardButton("✓ Confirm Range", callback_data=confirm_cb)],
         [InlineKeyboardButton("« Cancel", callback_data=f"range_cancel_{session_id}")]
     ]
-
+    
     reply_markup = InlineKeyboardMarkup(buttons)
+    
     try:
-        photo_message = await bot.send_photo(chat_id=session['chat_id'], photo=random.choice(SYD),
-                                         caption=text, reply_markup=reply_markup, quote=True)
+        # If a message object is provided, edit it. Otherwise, send a new one.
+        if message:
+            photo_message = await message.edit_caption(caption=text, reply_markup=reply_markup)
+        else:
+            photo_message = await bot.send_photo(chat_id=session['chat_id'], photo=random.choice(SYD),
+                                             caption=text, reply_markup=reply_markup, quote=True)
         session['message_id'] = photo_message.id
     except Exception as e:
-        logger.error(f"Error sending range message: {e}", exc_info=True)
+        logger.error(f"Error sending/editing range message: {e}", exc_info=True)
