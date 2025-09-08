@@ -38,6 +38,9 @@ def parse_message_input(message):
 @Client.on_message(filters.private & filters.command(["fwd", "forward"]))
 async def run(bot, message):
     user_id = message.from_user.id
+    if temp.lock.get(user_id):
+        return await message.reply("A task is already in progress. Please wait for it to complete before starting a new one.")
+    
     temp.USER_STATES.pop(user_id, None)
 
     bots = await db.get_bots(user_id)
@@ -90,10 +93,11 @@ async def cb_select_target(bot, query):
         start_id = 1
         
         try:
+            # Use the main bot client to get public channel info
             chat_info = await bot.get_chat(from_chat_id)
             from_title = chat_info.title
         except Exception:
-            from_title = "Private/Unknown Chat"
+            from_title = "Private/Unknown Chat" # Fallback for private chats
         
         await start_range_selection(bot, from_message, from_chat_id, from_title, to_chat_id, start_id, end_id)
 
@@ -176,5 +180,8 @@ async def show_final_confirmation(bot, session_id):
 
 @Client.on_callback_query(filters.regex(r'^close_btn$'))
 async def close_callback(bot, query):
-    temp.USER_STATES.pop(query.from_user.id, None)
+    user_id = query.from_user.id
+    # Ensure no lock is active before clearing states
+    if not temp.lock.get(user_id):
+        temp.USER_STATES.pop(user_id, None)
     await query.message.delete()
