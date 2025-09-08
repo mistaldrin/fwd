@@ -2,6 +2,7 @@ import re
 import asyncio
 import logging
 import random
+from uuid import uuid4
 from .utils import STS, start_range_selection, update_range_message
 from database import db
 from config import temp
@@ -73,36 +74,18 @@ async def cb_select_target(bot, query):
     user_id = query.from_user.id
     to_chat_id = int(query.data.split('_')[-1])
     
-    # Set state to wait for the source message
-    temp.USER_STATES[user_id] = {"state": "awaiting_source", "to_chat_id": to_chat_id, "message_id": query.message.id}
-    await query.message.edit_text(Translation.FROM_MSG)
+    await query.message.delete() # Clean up the button message
 
-# --- THE ROBUST STATEFUL MESSAGE HANDLER ---
-
-@Client.on_message(filters.private & ~filters.command() & ~filters.edited, group=1)
-async def stateful_message_handler(bot, message):
-    user_id = message.from_user.id
-    state_info = temp.USER_STATES.get(user_id)
-
-    if not state_info:
-        return # Not a stateful conversation, let other handlers run
-
-    state = state_info.get("state")
-    
-    # --- Handler for /forward's source message ---
-    if state == "awaiting_source":
-        to_chat_id = state_info["to_chat_id"]
-        from_chat_id, end_id, error = parse_message_input(message)
+    try:
+        from_message = await bot.ask(user_id, Translation.FROM_MSG, timeout=300)
         
-        # Clean up the prompt message
-        try:
-            await bot.delete_messages(user_id, state_info["message_id"])
-        except: pass
+        if from_message.text and from_message.text.lower() == "/cancel":
+            return await from_message.reply(Translation.CANCEL)
+
+        from_chat_id, end_id, error = parse_message_input(from_message)
         
         if error:
-            await message.reply(error)
-            temp.USER_STATES.pop(user_id, None) # Clear state on error
-            raise StopPropagation
+            return await from_message.reply(error)
 
         start_id = 1
         
@@ -112,74 +95,10 @@ async def stateful_message_handler(bot, message):
         except Exception:
             from_title = "Private/Unknown Chat"
         
-        temp.USER_STATES.pop(user_id, None) # Clear state before next step
-        await start_range_selection(bot, message, from_chat_id, from_title, to_chat_id, start_id, end_id)
-        raise StopPropagation
+        await start_range_selection(bot, from_message, from_chat_id, from_title, to_chat_id, start_id, end_id)
 
-    # --- Handler for range editing ---
-    elif state and state.startswith("awaiting_range_"):
-        value_type = state.split("_")[-1]
-        session_id = state_info.get("session_id")
-        session = temp.RANGE_SESSIONS.get(session_id)
-
-        # Clean up
-        temp.USER_STATES.pop(user_id, None)
-        try:
-            await bot.delete_messages(user_id, state_info["message_id"])
-        except: pass
-
-        if session and message.text and message.text.isdigit():
-            session[f'{value_type}_id'] = int(message.text)
-            await update_range_message(bot, session_id)
-        else:
-            await message.reply("Invalid ID or session expired. Please start over.")
-        raise StopPropagation
-
-    # --- Handler for /unequify manual input ---
-    elif state == "awaiting_unequify_manual_target":
-        target = message.text
-        temp.USER_STATES.pop(user_id, None)
-        
-        try:
-            await bot.delete_messages(user_id, state_info["message_id"])
-        except: pass
-
-        from plugins.unequify import unequify_start
-        message.command = ["/unequify", target]
-        await unequify_start(bot, message)
-        raise StopPropagation
-
-    # --- Handler for /unequify chat selection ---
-    elif state == "awaiting_unequify_chat_selection":
-        chats = state_info.get("chats", {})
-        selected_chat = chats.get(message.text.strip())
-        
-        temp.USER_STATES.pop(user_id, None)
-        try:
-            await bot.delete_messages(user_id, state_info["message_id"])
-        except: pass
-
-        if not selected_chat:
-            await message.reply("Invalid selection. Please start over.")
-            raise StopPropagation
-
-        userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
-        if not userbot_id:
-            await message.reply("Userbot selection lost. Please start over.")
-            raise StopPropagation
-        
-        userbot_config = await db.get_bot(user_id, userbot_id)
-        if not userbot_config:
-            await message.reply("Userbot config not found.")
-            raise StopPropagation
-
-        from plugins.test import CLIENT
-        async with CLIENT().client(userbot_config) as temp_client:
-            last_msg_id = 0
-            async for last_msg in temp_client.get_chat_history(selected_chat.id, limit=1):
-                last_msg_id = last_msg.id
-            await start_range_selection(bot, message, from_chat_id=selected_chat.id, from_title=selected_chat.title, to_chat_id=None, last_msg_id=last_msg_id, final_callback_prefix="uneq_final")
-        raise StopPropagation
+    except asyncio.TimeoutError:
+        await bot.send_message(user_id, "Process timed out. Please start over.")
 
 
 # --- Callbacks for Interactive Range Selection ---
@@ -209,8 +128,16 @@ async def range_selection_callbacks(bot, query):
 
     elif action == "edit":
         value_type = parts[2]
-        temp.USER_STATES[user_id] = {"state": f"awaiting_range_{value_type}", "session_id": session_id, "message_id": query.message.id}
-        await query.message.edit_caption(f"Send the new **{value_type.upper()} ID**.")
+        await query.message.delete()
+        try:
+            ask_msg = await bot.ask(user_id, f"Send the new **{value_type.upper()} ID**.", timeout=300)
+            if ask_msg.text and ask_msg.text.isdigit():
+                session[f'{value_type}_id'] = int(ask_msg.text)
+                await update_range_message(bot, session_id) # Send a new message with updated buttons
+            else:
+                await ask_msg.reply("Invalid ID. Please start over.")
+        except asyncio.TimeoutError:
+            await bot.send_message(user_id, "Process timed out.")
         
     elif action == "confirm":
         await query.message.delete()
@@ -233,7 +160,7 @@ async def show_final_confirmation(bot, session_id):
     
     start_id, end_id = (session['end_id'], session['start_id']) if session['order'] == 'desc' else (session['start_id'], session['end_id'])
     message_range_text = f"{min(start_id, end_id)} to {max(start_id, end_id)}"
-    forward_id = f"{user_id}-{session_id}"
+    forward_id = str(uuid4())
 
     STS(forward_id).store(From=session['from_chat_id'], to=session['to_chat_id'], start_id=start_id, end_id=end_id)
 
