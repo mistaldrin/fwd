@@ -78,7 +78,8 @@ async def start_clone_bot(FwdBot, bot_data):
             current += new_diff
 
    # Direct assignment, as seen in the working reference repository
-   FwdBot.iter_messages = iter_messages_fixed
+   if bot_data.get('is_bot', False):
+       FwdBot.iter_messages = iter_messages_fixed
    
    return FwdBot
 
