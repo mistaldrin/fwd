@@ -1,5 +1,5 @@
 import motor.motor_asyncio
-from pymongo import MongoClient
+from motor.motor_asyncio import AsyncIOMotorClient
 from config import Config, temp
 from os import environ
 
@@ -16,9 +16,10 @@ def initialize_database():
         db = Database(DB_URL, DB_NAME)
 
 async def mongodb_version():
-    x = MongoClient(Config.DB_URL)
-    mongodb_version = x.server_info()['version']
-    return mongodb_version
+    """Asynchronously gets the MongoDB server version."""
+    client = AsyncIOMotorClient(Config.DB_URL)
+    server_info = await client.server_info()
+    return server_info['version']
 
 class Database:
 
@@ -90,17 +91,13 @@ class Database:
     async def reset_user_data(self, user_id):
         """ Resets a user's entire configuration to default. """
         # Delete user's main config, bots, and channels
-        await self.col.delete_many({'id': int(user_id)})
+        user_doc = await self.col.find_one_and_delete({'id': int(user_id)})
         await self.bot.delete_many({'user_id': int(user_id)})
         await self.chl.delete_many({'user_id': int(user_id)})
         
-        # Re-add the user with a fresh document
-        user = await self.is_user_exist(user_id)
-        if not user:
-             # This part is for re-adding the user, you might need to get their first name again
-             # For simplicity, we can just re-add with their ID.
-             # In a real scenario, you'd prompt them to /start again.
-             await self.add_user(user_id, str(user_id))
+        # Re-add the user with a fresh document if they existed
+        if user_doc:
+             await self.add_user(user_id, user_doc.get('name', str(user_id)))
 
 
     async def get_banned(self):
@@ -125,6 +122,7 @@ class Database:
             'protect': None,
             'button': None,
             'db_uri': None,
+            'forward_delay': 1.0, # Added default for forward_delay
             'filters': {
                'poll': True,
                'text': True,
