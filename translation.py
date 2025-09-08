@@ -78,24 +78,17 @@ Manual input: `/unequify [channel_username_or_id]`"""
   BOT_DETAILS = "<b>֎ Bot Details ֎</b>\n\n● <b>Name:</b> <code>{}</code>\n● <b>ID:</b> <code>{}</code>\n● <b>Username:</b> {}"
   USER_DETAILS = "<b>֎ Userbot Details ֎</b>\n\n● <b>Name:</b> <code>{}</code>\n● <b>ID:</b> <code>{}</code>\n● <b>Username:</b> {}"  
          
-  TEXT = """**Forwarding Task Started!** 🚀
+  TEXT = """**Forwarding Task: `{status}`**"""
 
-`Status: {status}...`
-"""
+  DUPLICATE_TEXT = """**Deduplication Task: `{status}`**"""
 
-  DUPLICATE_TEXT = """**Deduplication Task Started!** 🗑️
+  STATUS_ALERT = """📊 **Real-Time Status** 📊
 
-`Status: {status}...`
-"""
-
-  STATUS_ALERT = """
-📊 **Real-Time Status** 📊
-
-**Processed:** `{fetched}` of `{total}`
-**Success:** `{forwarded}`
-**Skipped/Deleted:** `{deleted}`
-**Progress:** `{percentage}%`
-**ETA:** `{eta}`
+`Processed:    ` {fetched} of {total}
+`Success:      ` {forwarded}
+`Skipped:      ` {deleted}
+`Progress:     ` {percentage}%
+`ETA:          ` {eta}
 """
 
   DOUBLE_CHECK = """<b>֎ Final Check ֎</b>
