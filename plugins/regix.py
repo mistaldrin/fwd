@@ -25,14 +25,13 @@ async def pub_(bot, cb):
       return await cb.answer("Please wait for the previous task to complete!", show_alert=True)
     
     frwd_id = cb.data.split("_")[2]
-    temp.CANCEL[frwd_id] = False # Use unique task ID for cancellation
+    temp.CANCEL[frwd_id] = False
     sts = STS(frwd_id)
     if not sts.verify():
       return await cb.answer("This is an old button, please start over.", show_alert=True)
 
     i = sts.get(full=True)
     
-    # Initial verification message
     m = await msg_edit(cb.message, "Verifying...")
     
     _bot, caption, forward_tag, data_params, protect, button = await sts.get_data(user_id)
@@ -45,7 +44,6 @@ async def pub_(bot, cb):
     except Exception as e:  
       return await m.edit(f"Failed to start client: {e}")
 
-    # Verify access to source and target chats
     try: 
        from_chat_details = await client.get_chat(i.FROM)
        to_chat_details = await client.get_chat(i.TO)
@@ -53,9 +51,8 @@ async def pub_(bot, cb):
        to_title = to_chat_details.title
     except Exception as e:
        await msg_edit(m, f"Error accessing source/target chat: {e}\n\nMake sure your bot/userbot has access and is an admin in the target chat.", retry_btn(frwd_id), True)
-       return await stop(client, user_id, frwd_id, m) # Pass message obj for cleanup
+       return await stop(client, user_id, frwd_id, m)
     
-    # --- Register the task ---
     if user_id not in temp.ACTIVE_TASKS:
         temp.ACTIVE_TASKS[user_id] = {}
     temp.ACTIVE_TASKS[user_id][frwd_id] = {
@@ -71,20 +68,29 @@ async def pub_(bot, cb):
     sleep_duration = data_params.get('forward_delay', 1.0)
     
     try:
-        # --- Main Processing Loop ---
         messages_to_process = []
-        start_point = max(i.start_id, i.end_id)
-        end_point = min(i.start_id, i.end_id)
         
-        async for message in client.get_chat_history(chat_id=i.FROM):
-            if message.id > start_point: continue
-            if message.id < end_point: break
-            messages_to_process.append(message)
+        # --- INTELLIGENT METHOD SWITCHING ---
+        if _bot.get('is_bot', False):
+            # BOT METHOD: Use the patched iter_messages
+            start_point = min(i.start_id, i.end_id)
+            end_point = max(i.start_id, i.end_id)
+            async for message in client.iter_messages(chat_id=i.FROM, limit=end_point, offset=start_point):
+                 messages_to_process.append(message)
+        else:
+            # USERBOT METHOD: Use the efficient get_chat_history
+            start_point = max(i.start_id, i.end_id)
+            end_point = min(i.start_id, i.end_id)
+            async for message in client.get_chat_history(chat_id=i.FROM):
+                if message.id > start_point: continue
+                if message.id < end_point: break
+                messages_to_process.append(message)
 
+        # Handle message ordering
         if i.start_id < i.end_id:
             messages_to_process.reverse()
-        # --- End of message fetching ---
-        
+        # --- END OF SWITCHING LOGIC ---
+
         MSG_batch = []
         
         for message in messages_to_process:
@@ -100,7 +106,7 @@ async def pub_(bot, cb):
 
             if forward_tag:
                MSG_batch.append(message.id)
-               if len(MSG_batch) >= 100 or (sts.fetched == i.total):
+               if len(MSG_batch) >= 100 or (sts.fetched == len(messages_to_process)):
                   await forward(client, MSG_batch, m, sts, protect)
                   sts.add('total_files', len(MSG_batch))
                   await asyncio.sleep(10)
@@ -112,7 +118,6 @@ async def pub_(bot, cb):
                sts.add('total_files')
                await asyncio.sleep(sleep_duration)
             
-            # Update progress every 20 messages
             if sts.fetched % 20 == 0:
                 await edit_progress(m, sts, "running")
 
@@ -189,12 +194,12 @@ async def edit_progress(msg, sts, status):
     i = sts.get(full=True)
     now = time.time()
     diff = now - i.start
-    if diff == 0: diff = 1 # Avoid division by zero
+    if diff == 0: diff = 1
     
     speed = i.fetched / diff
-    if speed == 0: speed = 1 # Avoid division by zero
+    if speed == 0: speed = 1
     
-    eta_seconds = (i.total - i.fetched) / speed
+    eta_seconds = (i.total - i.fetched) / speed if speed > 0 else 0
     eta = sts.get_readable_time(int(eta_seconds))
     
     percentage = "{:.2f}".format(i.fetched * 100 / i.total) if i.total > 0 else "0.00"
@@ -226,7 +231,6 @@ async def stop(client, user_id, task_id, message_obj):
      await client.stop()
    except: pass 
    
-   # Unregister the task
    if temp.ACTIVE_TASKS.get(user_id, {}).get(task_id):
        del temp.ACTIVE_TASKS[user_id][task_id]
 
