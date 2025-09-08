@@ -19,7 +19,7 @@ def parse_message_input(message):
         return None, None, "Invalid input. A message link or forwarded message is required."
 
     if message.text and not message.forward_date:
-        regex = re.compile(r"(https://)?(t\.me/|telegram\.me/|telegram\.dog/)(c/)?(\d+|[a-zA-Z_0_9]+)/(\d+)$")
+        regex = re.compile(r"(https://)?(t\.me/|telegram\.me/|telegram\.dog/)(c/)?(\d+|[a-zA-Z_0-9]+)/(\d+)$")
         match = regex.match(message.text.replace("?single", ""))
         if not match:
             return None, None, 'Invalid Link.'
@@ -92,12 +92,16 @@ async def cb_select_target(bot, query):
 
 
 # --- NEW High-Priority Stateful Message Handler ---
-@Client.on_message(filters.private & ~filters.edited, group=-1)
+@Client.on_message(filters.private & filters.incoming, group=-1)
 async def stateful_message_handler(bot: Client, message: Message):
     """
     This handler checks for user states and processes messages accordingly.
     It runs before other handlers due to group=-1.
     """
+    # Ignore edited messages
+    if message.edit_date:
+        return
+
     user_id = message.from_user.id
     state_info = temp.USER_STATES.get(user_id)
 
