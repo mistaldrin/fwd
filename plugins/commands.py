@@ -8,7 +8,7 @@ from platform import python_version
 from translation import Translation
 from pyrogram import Client, filters, enums, __version__ as pyrogram_version
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaDocument
-from .test import update_configs
+from .test import update_configs, CLIENT
 
 SYD = ["https://files.catbox.moe/3lwlbm.png"]
 
@@ -61,7 +61,7 @@ async def confirm_reset_callback(bot, query):
     user_id = query.from_user.id
     try:
         await db.reset_user_data(user_id)
-        await query.message.edit_text("✓ **Account has been reset.**\n\nUse /start to begin again.")
+        await query.message.edit_text("✓ **Account has been reset.**\n\nYour bots, userbots, channels, and custom settings have been cleared.\n\nUse /start to begin again.")
     except Exception as e:
         await query.message.edit_text(f"An error occurred during reset: `{e}`")
 
@@ -103,7 +103,6 @@ async def helpcb(bot, query):
 async def forward_delay(client, message):
     user_id = message.from_user.id
     
-    # Explicitly check if the user is banned
     ban_status = await db.get_ban_status(user_id)
     if ban_status["is_banned"]:
         return await message.reply_text(f"Access denied.\n\nReason: {ban_status['ban_reason']}")
@@ -119,7 +118,46 @@ async def forward_delay(client, message):
         await update_configs(user_id, 'forward_delay', delay)
         await message.reply_text(f"Forwarding delay set to {delay} seconds.")
     except ValueError:
-        await message.reply_text("Invalid input. Please provide a number.")
+        await message.reply_text("Invalid input. Please provide a number (e.g., `0.5`, `1`, `2`).")
+
+# --- New ubclist command ---
+@Client.on_message(filters.private & filters.command("ubclist"))
+async def ubclist_command(bot: Client, message: Message):
+    user_id = message.from_user.id
+    userbots = [b for b in await db.get_bots(user_id) if not b.get('is_bot')]
+    
+    if not userbots:
+        return await message.reply_text("You haven't added any userbots. Please add one in /settings.")
+
+    if len(userbots) > 1:
+        buttons = [[InlineKeyboardButton(ub['name'], callback_data=f"ubclist_select_{ub['id']}")] for ub in userbots]
+        buttons.append([InlineKeyboardButton("« Cancel", callback_data="close_btn")])
+        await message.reply_text("<b>Select a Userbot to list its chats:</b>", reply_markup=InlineKeyboardMarkup(buttons))
+    else:
+        await list_userbot_chats(bot, message, user_id, userbots[0]['id'])
+
+@Client.on_callback_query(filters.regex("^ubclist_select_"))
+async def cb_select_userbot_ubclist(bot: Client, query: CallbackQuery):
+    userbot_id = int(query.data.split('_')[-1])
+    await query.message.delete()
+    await list_userbot_chats(bot, query.message, query.from_user.id, userbot_id)
+
+async def list_userbot_chats(bot: Client, message: Message, user_id: int, userbot_id: int):
+    status_msg = await message.reply_text("`Fetching chats, please wait...`")
+    
+    userbot_config = await db.get_bot(user_id, userbot_id)
+    if not userbot_config:
+        return await status_msg.edit("Userbot not found.")
+
+    text, serial = "<b>List of recent chats (up to 50):</b>\n\n", 1
+    try:
+        async with CLIENT().client(userbot_config) as userbot:
+            async for dialog in userbot.get_dialogs(limit=50):
+                text += f"<b>{serial}.</b> {dialog.chat.title} (<code>{dialog.chat.id}</code>)\n"
+                serial += 1
+        await status_msg.edit_text(text, parse_mode=enums.ParseMode.HTML)
+    except Exception as e:
+        await status_msg.edit(f"An error occurred: `{e}`")
 
 
 @Client.on_callback_query(filters.regex(r'^how_to_use'))
