@@ -40,7 +40,8 @@ async def pub_(bot, cb):
       return await msg_edit(m, "You haven't added a bot/userbot. Please do so in /settings.", wait=True)
 
     try:
-      client = await start_clone_bot(CLIENT.client(_bot))
+      # Pass both the client object and its data dictionary
+      client = await start_clone_bot(CLIENT.client(_bot), _bot)
     except Exception as e:  
       return await m.edit(f"Failed to start client: {e}")
 
@@ -75,6 +76,7 @@ async def pub_(bot, cb):
             # BOT METHOD: Use the patched iter_messages
             start_point = min(i.start_id, i.end_id)
             end_point = max(i.start_id, i.end_id)
+            # The patched iter_messages works for both bots and userbots
             async for message in client.iter_messages(chat_id=i.FROM, limit=end_point, offset=start_point):
                  messages_to_process.append(message)
         else:
