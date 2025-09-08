@@ -38,6 +38,14 @@ async def settings_query(bot, query):
   try:
     i, type = query.data.split("#")
     buttons = [[InlineKeyboardButton('« Back', callback_data="settings#main")]]
+    
+    # A reusable function to handle cancellation and timeouts
+    async def handle_cancellation(original_message, new_message):
+        await new_message.delete()
+        await original_message.edit_text(
+            "Process cancelled.",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
 
     if type=="main":
        await query.message.edit_text(
@@ -70,16 +78,18 @@ async def settings_query(bot, query):
        await query.message.delete()
        add_bot_status = await CLIENT.add_bot(bot, query)
        if add_bot_status != True: return
-       await query.message.reply_text(
-          "Bot token added. ✓",
+       await bot.send_message(
+          chat_id=user_id,
+          text="Bot token added. ✓",
           reply_markup=InlineKeyboardMarkup(buttons))
 
     elif type=="adduserbot":
        await query.message.delete()
        user = await CLIENT.add_session(bot, query)
        if user != True: return
-       await query.message.reply_text(
-          "Session added. ✓",
+       await bot.send_message(
+          chat_id=user_id,
+          text="Session added. ✓",
           reply_markup=InlineKeyboardMarkup(buttons))
 
     elif type=="channels":
@@ -97,38 +107,31 @@ async def settings_query(bot, query):
          reply_markup=InlineKeyboardMarkup(buttons))
 
     elif type=="addchannel":
-       await query.message.delete()
+       original_message = await query.message.edit_text("<b>Set Target Chat</b>\n\nForward a message from the target chat.\n\n/cancel - to cancel.")
        try:
-           text = await bot.send_message(user_id, "<b>Set Target Chat</b>\n\nForward a message from the target chat.\n\n/cancel - to cancel.")
-           chat_ids = await bot.listen(chat_id=user_id, timeout=300)
-           if chat_ids.text=="/cancel":
-              await chat_ids.delete()
-              return await text.edit_text(
-                    "Process cancelled.",
-                    reply_markup=InlineKeyboardMarkup(buttons))
-           elif not chat_ids.forward_date:
-              await chat_ids.delete()
-              return await text.edit_text("Not a forwarded message. (・_・;)")
-           else:
-              chat_id = chat_ids.forward_from_chat.id
-              title = chat_ids.forward_from_chat.title
-              username = chat_ids.forward_from_chat.username
-              username = "@" + username if username else "private"
+           forwarded_message = await bot.ask(chat_id=user_id, text="Forward a message from the target chat to add it.", timeout=300)
+           if forwarded_message.text and forwarded_message.text.lower() == "/cancel":
+              return await handle_cancellation(original_message, forwarded_message)
+           
+           if not forwarded_message.forward_date:
+              await forwarded_message.delete()
+              return await original_message.edit_text("Not a forwarded message. (・_・;)", reply_markup=InlineKeyboardMarkup(buttons))
 
-           # Check for duplicate channel before adding
+           chat_id = forwarded_message.forward_from_chat.id
+           title = forwarded_message.forward_from_chat.title
+           username = forwarded_message.forward_from_chat.username
+           username = "@" + username if username else "private"
+
            if await db.in_channel(user_id, chat_id):
-               await chat_ids.delete()
-               await text.edit_text(
-                   "This channel has already been added.",
-                   reply_markup=InlineKeyboardMarkup(buttons))
+               await forwarded_message.delete()
+               await original_message.edit_text("This channel has already been added.", reply_markup=InlineKeyboardMarkup(buttons))
            else:
                await db.add_channel(user_id, chat_id, title, username)
-               await chat_ids.delete()
-               await text.edit_text(
-                   "Channel added. ✓",
-                   reply_markup=InlineKeyboardMarkup(buttons))
-       except asyncio.exceptions.TimeoutError:
-           await text.edit_text('Process timed out.', reply_markup=InlineKeyboardMarkup(buttons))
+               await forwarded_message.delete()
+               await original_message.edit_text("Channel added. ✓", reply_markup=InlineKeyboardMarkup(buttons))
+       except asyncio.TimeoutError:
+           await original_message.edit_text('Process timed out.', reply_markup=InlineKeyboardMarkup(buttons))
+
 
     elif type.startswith("editbot"):
        bot_id = int(type.split('_')[1])
@@ -213,29 +216,24 @@ async def settings_query(bot, query):
           reply_markup=InlineKeyboardMarkup(buttons))
 
     elif type=="addcaption":
-       await query.message.delete()
+       original_message = await query.message.edit_text("Send the new custom caption.\n\n/cancel - to cancel.")
        try:
-           text = await bot.send_message(query.message.chat.id, "Send the new custom caption.\n\n/cancel - to cancel.")
-           caption = await bot.listen(chat_id=user_id, timeout=300)
-           if caption.text=="/cancel":
-              await caption.delete()
-              return await text.edit_text(
-                    "Process cancelled.",
-                    reply_markup=InlineKeyboardMarkup(buttons))
+           caption_message = await bot.ask(chat_id=user_id, text="Send your new caption.", timeout=300)
+           if caption_message.text and caption_message.text.lower() == "/cancel":
+               return await handle_cancellation(original_message, caption_message)
+           
            try:
-              caption.text.format(filename='', size='', caption='')
+              caption_message.text.format(filename='', size='', caption='')
            except KeyError as e:
-              await caption.delete()
-              return await text.edit_text(
-                 f"Invalid placeholder {e}. Try again.",
-                 reply_markup=InlineKeyboardMarkup(buttons))
-           await update_configs(user_id, 'caption', caption.text)
-           await caption.delete()
-           await text.edit_text(
-              "Custom caption updated. ✓",
-              reply_markup=InlineKeyboardMarkup(buttons))
-       except asyncio.exceptions.TimeoutError:
-           await text.edit_text('Process timed out.', reply_markup=InlineKeyboardMarkup(buttons))
+              await caption_message.delete()
+              return await original_message.edit_text(f"Invalid placeholder {e}. Try again.", reply_markup=InlineKeyboardMarkup(buttons))
+           
+           await update_configs(user_id, 'caption', caption_message.text)
+           await caption_message.delete()
+           await original_message.edit_text("Custom caption updated. ✓", reply_markup=InlineKeyboardMarkup(buttons))
+       except asyncio.TimeoutError:
+           await original_message.edit_text('Process timed out.', reply_markup=InlineKeyboardMarkup(buttons))
+
 
     elif type=="button":
        buttons = []
@@ -255,20 +253,23 @@ async def settings_query(bot, query):
           reply_markup=InlineKeyboardMarkup(buttons))
 
     elif type=="addbutton":
-       await query.message.delete()
+       original_message = await query.message.edit_text("**Send the custom button.**\n\n**Format:**\n`[Text][buttonurl:https://example.com]`\n\n/cancel - to cancel.")
        try:
-           txt = await bot.send_message(user_id, text="**Send the custom button.**\n\n**Format:**\n`[Text][buttonurl:https://example.com]`")
-           ask = await bot.listen(chat_id=user_id, timeout=300)
-           button = parse_buttons(ask.text.html)
-           if not button:
-              await ask.delete()
-              return await txt.edit_text("Invalid button format.")
-           await update_configs(user_id, 'button', ask.text.html)
-           await ask.delete()
-           await txt.edit_text("Custom button added. ✓",
-              reply_markup=InlineKeyboardMarkup(buttons))
-       except asyncio.exceptions.TimeoutError:
-           await txt.edit_text('Process timed out.', reply_markup=InlineKeyboardMarkup(buttons))
+           button_message = await bot.ask(chat_id=user_id, text="Send the button text in the correct format.", timeout=300)
+           if button_message.text and button_message.text.lower() == "/cancel":
+               return await handle_cancellation(original_message, button_message)
+
+           button_markup = parse_buttons(button_message.text.html)
+           if not button_markup:
+              await button_message.delete()
+              return await original_message.edit_text("Invalid button format.", reply_markup=InlineKeyboardMarkup(buttons))
+           
+           await update_configs(user_id, 'button', button_message.text.html)
+           await button_message.delete()
+           await original_message.edit_text("Custom button added. ✓", reply_markup=InlineKeyboardMarkup(buttons))
+       except asyncio.TimeoutError:
+           await original_message.edit_text('Process timed out.', reply_markup=InlineKeyboardMarkup(buttons))
+
 
     elif type=="seebutton":
         button = (await get_configs(user_id))['button']
@@ -302,18 +303,22 @@ async def settings_query(bot, query):
           reply_markup=InlineKeyboardMarkup(buttons))
 
     elif type=="addurl":
-       await query.message.delete()
-       uri = await bot.ask(user_id, "<b>Send the MongoDB connection URL.</b>\n\nGet one from [mongodb.com](https://mongodb.com).", disable_web_page_preview=True)
-       if uri.text=="/cancel":
-          return await uri.reply_text(
-                    "Process cancelled.",
-                    reply_markup=InlineKeyboardMarkup(buttons))
-       if not uri.text.startswith("mongodb+srv://"):
-          return await uri.reply("Invalid MongoDB URL format.",
-                     reply_markup=InlineKeyboardMarkup(buttons))
-       await update_configs(user_id, 'db_uri', uri.text)
-       await uri.reply("Database URL added. ✓",
-               reply_markup=InlineKeyboardMarkup(buttons))
+       original_message = await query.message.edit_text("<b>Send the MongoDB connection URL.</b>\n\nGet one from [mongodb.com](https://mongodb.com).\n\n/cancel - to cancel.", disable_web_page_preview=True)
+       try:
+           uri_message = await bot.ask(user_id, "Send your MongoDB URL.", timeout=300)
+           if uri_message.text and uri_message.text.lower() == "/cancel":
+               return await handle_cancellation(original_message, uri_message)
+
+           if not uri_message.text.startswith("mongodb+srv://"):
+              await uri_message.delete()
+              return await original_message.edit_text("Invalid MongoDB URL format.", reply_markup=InlineKeyboardMarkup(buttons))
+           
+           await update_configs(user_id, 'db_uri', uri_message.text)
+           await uri_message.delete()
+           await original_message.edit_text("Database URL added. ✓", reply_markup=InlineKeyboardMarkup(buttons))
+       except asyncio.TimeoutError:
+           await original_message.edit_text('Process timed out.', reply_markup=InlineKeyboardMarkup(buttons))
+
 
     elif type=="seeurl":
        db_uri = (await get_configs(user_id))['db_uri']
@@ -376,23 +381,25 @@ async def settings_query(bot, query):
          reply_markup=size_button(int(size)))
 
     elif type == "add_extension":
-      await query.message.delete()
-      ext = await bot.ask(user_id, text="Send file extensions to filter (separated by a space).")
-      if ext.text == '/cancel':
-         return await ext.reply_text(
-                    "Process cancelled.",
-                    reply_markup=InlineKeyboardMarkup(buttons))
-      extensions = ext.text.split(" ")
-      extension = (await get_configs(user_id))['extension']
-      if extension:
-          for extn in extensions:
-              extension.append(extn)
-      else:
-          extension = extensions
-      await update_configs(user_id, 'extension', extension)
-      await ext.reply_text(
-          f"Extensions filter updated. ✓",
-          reply_markup=InlineKeyboardMarkup(buttons))
+      original_message = await query.message.edit_text("Send file extensions to filter (separated by a space).\n\n/cancel - to cancel")
+      try:
+          ext_message = await bot.ask(user_id, text="Send your extensions now.", timeout=300)
+          if ext_message.text and ext_message.text.lower() == '/cancel':
+              return await handle_cancellation(original_message, ext_message)
+
+          extensions_to_add = ext_message.text.lower().split(" ")
+          current_extensions = (await get_configs(user_id))['extension'] or []
+          
+          # Add only new extensions
+          new_extensions = [ext for ext in extensions_to_add if ext not in current_extensions]
+          updated_extensions = current_extensions + new_extensions
+          
+          await update_configs(user_id, 'extension', updated_extensions)
+          await ext_message.delete()
+          await original_message.edit_text("Extensions filter updated. ✓", reply_markup=InlineKeyboardMarkup(buttons))
+      except asyncio.TimeoutError:
+          await original_message.edit_text('Process timed out.', reply_markup=InlineKeyboardMarkup(buttons))
+
 
     elif type == "get_extension":
       extensions = (await get_configs(user_id))['extension']
@@ -409,23 +416,24 @@ async def settings_query(bot, query):
       await query.message.edit_text("All extension filters removed.",
                                      reply_markup=InlineKeyboardMarkup(buttons))
     elif type == "add_keyword":
-      await query.message.delete()
-      ask = await bot.ask(user_id, text="Send keywords to filter (separated by a space).")
-      if ask.text == '/cancel':
-         return await ask.reply_text(
-                    "Process cancelled.",
-                    reply_markup=InlineKeyboardMarkup(buttons))
-      keywords = ask.text.split(" ")
-      keyword = (await get_configs(user_id))['keywords']
-      if keyword:
-          for word in keywords:
-              keyword.append(word)
-      else:
-          keyword = keywords
-      await update_configs(user_id, 'keywords', keyword)
-      await ask.reply_text(
-          f"Keywords filter updated. ✓",
-          reply_markup=InlineKeyboardMarkup(buttons))
+      original_message = await query.message.edit_text("Send keywords to filter (separated by a space).\n\n/cancel - to cancel")
+      try:
+          keyword_message = await bot.ask(user_id, text="Send your keywords now.", timeout=300)
+          if keyword_message.text and keyword_message.text.lower() == '/cancel':
+              return await handle_cancellation(original_message, keyword_message)
+
+          keywords_to_add = keyword_message.text.lower().split(" ")
+          current_keywords = (await get_configs(user_id))['keywords'] or []
+
+          new_keywords = [kw for kw in keywords_to_add if kw not in current_keywords]
+          updated_keywords = current_keywords + new_keywords
+
+          await update_configs(user_id, 'keywords', updated_keywords)
+          await keyword_message.delete()
+          await original_message.edit_text("Keywords filter updated. ✓", reply_markup=InlineKeyboardMarkup(buttons))
+      except asyncio.TimeoutError:
+          await original_message.edit_text('Process timed out.', reply_markup=InlineKeyboardMarkup(buttons))
+
 
     elif type == "get_keyword":
       keywords = (await get_configs(user_id))['keywords']
@@ -448,7 +456,10 @@ async def settings_query(bot, query):
   except Exception as e:
       print(f"Error in settings_query: {e}")
       # Notify the user that an error occurred
-      await query.message.reply_text("An unexpected error occurred. Please try again later.")
+      try:
+        await query.message.reply_text("An unexpected error occurred. Please try again later.")
+      except:
+        await bot.send_message(user_id, "An unexpected error occurred. Please try again later.")
 
 
 def main_buttons():
