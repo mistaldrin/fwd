@@ -51,6 +51,9 @@ async def unequify_start(bot: Client, message: Message):
     Initial entry point for the /unequify command.
     """
     user_id = message.from_user.id
+    if temp.lock.get(user_id):
+        return await message.reply("A task is already in progress. Please wait for it to complete before starting a new one.")
+    
     temp.USER_STATES.pop(user_id, None) # Clear previous states
     
     ban_status = await db.get_ban_status(user_id)
@@ -187,19 +190,26 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
         await start_deduplication(bot, query, selection_state, session_id)
 
 async def start_deduplication(bot: Client, callback_query: CallbackQuery, selection_state: str, session_id: str):
-    status_message = await bot.send_message(callback_query.from_user.id, "`Processing...`")
     user_id = callback_query.from_user.id
+    if temp.lock.get(user_id):
+        return await callback_query.answer("Another task is already in progress.", show_alert=True)
+
+    temp.lock[user_id] = True
+    status_message = await bot.send_message(user_id, "`Processing...`")
     
     range_session = temp.RANGE_SESSIONS.pop(session_id, None)
     if not range_session:
+        temp.lock[user_id] = False
         return await status_message.edit("Error: Session expired or invalid.")
 
     userbot_id = temp.UNEQUIFY_USERBOT_ID.pop(user_id, None)
     if not userbot_id:
+        temp.lock[user_id] = False
         return await status_message.edit("Error: Bot selection lost.")
 
     userbot_config = await db.get_bot(user_id, userbot_id)
     if not userbot_config:
+        temp.lock[user_id] = False
         return await status_message.edit("Error: Userbot not found.")
 
     target_channel, start_id, end_id = range_session['from_chat_id'], min(range_session['start_id'], range_session['end_id']), max(range_session['start_id'], range_session['end_id'])
@@ -224,7 +234,6 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
                     total_scanned += 1
                     identifier = None
                     
-                    # --- FIXED DEDUPLICATION LOGIC ---
                     if selection_state[0] == '1' and msg.text: 
                         identifier = msg.text.strip()
                     elif selection_state[1] == '1' and (msg.photo or msg.video):
@@ -236,7 +245,6 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
                         identifier = msg.document.file_unique_id
                     elif selection_state[4] == '1' and msg.sticker: 
                         identifier = msg.sticker.file_unique_id
-                    # --- END OF FIX ---
 
                     if identifier and identifier in seen_identifiers:
                         duplicates_to_delete.append(msg.id)
@@ -260,3 +268,5 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
             await status_message.edit(f"✓ **Deduplication Complete!**\n\n**Messages Scanned:** `{total_scanned}`\n**Duplicates Deleted:** `{total_deleted}`")
     except Exception as e:
         await status_message.edit(f"❌ **An unexpected error occurred.**\n\n`{e}`")
+    finally:
+        temp.lock[user_id] = False # Release the lock
