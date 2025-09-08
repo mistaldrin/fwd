@@ -40,7 +40,6 @@ async def pub_(bot, cb):
       return await msg_edit(m, "You haven't added a bot/userbot. Please do so in /settings.", wait=True)
 
     try:
-      # Pass both the client object and its data dictionary
       client = await start_clone_bot(CLIENT.client(_bot), _bot)
     except Exception as e:  
       return await m.edit(f"Failed to start client: {e}")
@@ -65,50 +64,31 @@ async def pub_(bot, cb):
     temp.forwardings += 1
     await db.add_frwd(user_id)
     await send(bot, user_id, "Forwarding Started!")
-    sts.add(time=True)
+    await edit_progress(m, sts, "starting")
+    
     sleep_duration = data_params.get('forward_delay', 1.0)
     
     try:
-        messages_to_process = []
+        start_point = min(i.start_id, i.end_id)
+        end_point = max(i.start_id, i.end_id)
         
-        # --- INTELLIGENT METHOD SWITCHING ---
-        if _bot.get('is_bot', False):
-            # BOT METHOD: Use the patched iter_messages
-            start_point = min(i.start_id, i.end_id)
-            end_point = max(i.start_id, i.end_id)
-            # The patched iter_messages works for both bots and userbots
-            async for message in client.iter_messages(chat_id=i.FROM, limit=end_point, offset=start_point):
-                 messages_to_process.append(message)
-        else:
-            # USERBOT METHOD: Use the efficient get_chat_history
-            start_point = max(i.start_id, i.end_id)
-            end_point = min(i.start_id, i.end_id)
-            async for message in client.get_chat_history(chat_id=i.FROM):
-                if message.id > start_point: continue
-                if message.id < end_point: break
-                messages_to_process.append(message)
-
-        # Handle message ordering
-        if i.start_id < i.end_id:
-            messages_to_process.reverse()
-        # --- END OF SWITCHING LOGIC ---
-
         MSG_batch = []
         
-        for message in messages_to_process:
+        # Using the correctly patched iter_messages for bots, or default for userbots
+        async for message in client.iter_messages(client, chat_id=i.FROM, limit=end_point, offset=start_point):
             if temp.CANCEL.get(frwd_id):
                 await is_cancelled(client, user_id, m, sts, frwd_id)
                 return
 
             sts.add('fetched')
             
-            if message.empty or message.service:
+            if not message or message.empty or message.service:
                sts.add('deleted')
                continue
 
             if forward_tag:
                MSG_batch.append(message.id)
-               if len(MSG_batch) >= 100 or (sts.fetched == len(messages_to_process)):
+               if len(MSG_batch) >= 100 or (sts.fetched >= i.total):
                   await forward(client, MSG_batch, m, sts, protect)
                   sts.add('total_files', len(MSG_batch))
                   await asyncio.sleep(10)
