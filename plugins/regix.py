@@ -63,15 +63,36 @@ async def pub_(bot, cb):
     await db.add_frwd(user_id)
     await send(bot, user_id, "Forwarding Started!")
     sts.add(time=True)
-    sleep_duration = 1 if _bot['is_bot'] else 10
+    sleep_duration = data_params.get('forward_delay', 1.0)
     temp.IS_FRWD_CHAT.append(i.TO)
 
     try:
+        await edit(m, 'Fetching messages...', 'running', sts)
+        
+        # --- NEW ROBUST FORWARDING LOGIC ---
+        messages_to_process = []
+        # Determine the correct start and end points for fetching
+        start_point = max(i.start_id, i.end_id)
+        end_point = min(i.start_id, i.end_id)
+
+        # Fetch all messages in the range using the reliable get_chat_history
+        async for message in client.get_chat_history(chat_id=i.FROM):
+            if message.id > start_point:
+                continue
+            if message.id < end_point:
+                break
+            messages_to_process.append(message)
+
+        # Reverse the list if the user selected ascending order (oldest to newest)
+        if i.start_id < i.end_id:
+            messages_to_process.reverse()
+        # --- END OF NEW LOGIC ---
+
         MSG_batch = []
         pling = 0
-        await edit(m, 'Starting...', 'running', sts)
         
-        async for message in client.iter_messages(chat_id=i.FROM, limit=i.limit, offset=i.skip):
+        # Iterate through the fetched messages
+        for message in messages_to_process:
             if temp.CANCEL.get(user_id):
                 await is_cancelled(client, user_id, m, sts)
                 return
@@ -95,7 +116,7 @@ async def pub_(bot, cb):
                   MSG_batch = []
             else:
                new_caption = custom_caption(message, caption)
-               details = {"msg_id": message.id, "media": media(message), "caption": new_caption, 'button': button, "protect": protect}
+               details = {"msg_id": message.id, "media": media(message), "caption": new_caption, 'button': button, "protect": protect, "text": message.text.html if message.text else None}
                await copy(client, details, m, sts)
                sts.add('total_files')
                await asyncio.sleep(sleep_duration) 
@@ -127,13 +148,17 @@ async def copy(bot, msg, m, sts):
               caption=msg.get("caption"),
               reply_markup=msg.get('button'),
               protect_content=msg.get("protect", False))
-     else: # For text messages
+     elif msg.get("text"): # For text messages
         await bot.send_message(
               chat_id=sts.get('TO'),
               text=msg.get("text"),
               reply_markup=msg.get('button'),
               protect_content=msg.get("protect", False)
         )
+     else:
+        # Handle cases where there's no media or text (e.g., service messages already filtered)
+        sts.add('deleted')
+
    except FloodWait as e:
      await edit(m, f'Sleeping: {e.value}s', 'floodwait', sts)
      await asyncio.sleep(e.value)
