@@ -64,18 +64,35 @@ async def pub_(bot, cb):
     temp.forwardings += 1
     await db.add_frwd(user_id)
     await send(bot, user_id, "Forwarding Started!")
-    await edit_progress(m, sts, "starting")
     
     sleep_duration = data_params.get('forward_delay', 1.0)
-    
+    last_edit_time = time.time()
+
     try:
-        start_point = min(i.start_id, i.end_id)
-        end_point = max(i.start_id, i.end_id)
+        messages_to_process = []
         
+        if _bot.get('is_bot', False):
+            start_point = min(i.start_id, i.end_id)
+            end_point = max(i.start_id, i.end_id)
+            async for message in client.iter_messages(client, chat_id=i.FROM, limit=end_point, offset=start_point):
+                 if message: messages_to_process.append(message)
+        else:
+            start_point = max(i.start_id, i.end_id)
+            end_point = min(i.start_id, i.end_id)
+            async for message in client.get_chat_history(chat_id=i.FROM):
+                if message.id > start_point: continue
+                if message.id < end_point: break
+                if message: messages_to_process.append(message)
+
+        if i.start_id < i.end_id:
+            messages_to_process.reverse()
+        
+        # Initial Progress Message
+        await edit_progress(m, sts, "running")
+
         MSG_batch = []
         
-        # Using the correctly patched iter_messages for bots, or default for userbots
-        async for message in client.iter_messages(client, chat_id=i.FROM, limit=end_point, offset=start_point):
+        for message in messages_to_process:
             if temp.CANCEL.get(frwd_id):
                 await is_cancelled(client, user_id, m, sts, frwd_id)
                 return
@@ -100,8 +117,10 @@ async def pub_(bot, cb):
                sts.add('total_files')
                await asyncio.sleep(sleep_duration)
             
-            if sts.fetched % 20 == 0:
+            current_time = time.time()
+            if current_time - last_edit_time > 15:
                 await edit_progress(m, sts, "running")
+                last_edit_time = current_time
 
         if forward_tag and MSG_batch:
             await forward(client, MSG_batch, m, sts, protect)
@@ -116,6 +135,32 @@ async def pub_(bot, cb):
     
     finally:
         await stop(client, user_id, frwd_id, m)
+
+# --- Callbacks ---
+@Client.on_callback_query(filters.regex(r'^frwd_status_'))
+async def get_frwd_status(bot, query):
+    task_id = query.data.split("_", 2)[2]
+    sts = STS(task_id)
+    if not sts.verify():
+        return await query.answer("This task has completed or been cancelled.", show_alert=True)
+    
+    i = sts.get(full=True)
+    now = time.time()
+    diff = now - i.start
+    if diff == 0: diff = 1
+    
+    speed = i.fetched / diff
+    eta_seconds = (i.total - i.fetched) / speed if speed > 0 else 0
+    eta = sts.get_readable_time(int(eta_seconds))
+    percentage = "{:.2f}".format(i.fetched * 100 / i.total) if i.total > 0 else "0.00"
+
+    status_text = Translation.STATUS_ALERT.format(
+        fetched=i.fetched, total=i.total,
+        forwarded=i.total_files,
+        deleted=i.deleted + i.filtered,
+        eta=eta, percentage=percentage
+    )
+    await query.answer(status_text, show_alert=True)
 
 
 # --- Helper functions ---
@@ -171,40 +216,28 @@ async def msg_edit(msg, text, button=None, wait=None):
         logger.error(f"Error editing message: {e}")
         return msg
 
-
 async def edit_progress(msg, sts, status):
     i = sts.get(full=True)
-    now = time.time()
-    diff = now - i.start
-    if diff == 0: diff = 1
-    
-    speed = i.fetched / diff
-    if speed == 0: speed = 1
-    
-    eta_seconds = (i.total - i.fetched) / speed if speed > 0 else 0
-    eta = sts.get_readable_time(int(eta_seconds))
-    
-    percentage = "{:.2f}".format(i.fetched * 100 / i.total) if i.total > 0 else "0.00"
-    progress = "▰{0}▱".format('▰' * (math.floor(float(percentage) / 10) -1) if float(percentage) > 10 else '')
-    
-    text = Translation.TEXT.format(
-       fetched=i.fetched, total=i.total,
-       forwarded=i.total_files, duplicate=i.duplicate,
-       deleted=i.deleted + i.filtered, status=status,
-       percentage=percentage, progress_bar=progress,
-       eta=eta, speed=round(speed, 2)
-    )
+    text = Translation.TEXT.format(status=status)
     
     button = None
     if status not in ["cancelled", "completed"]:
-      button = InlineKeyboardMarkup([[InlineKeyboardButton('❌ Cancel Task', f'cancel_task_{i.id}')]])
+      button = InlineKeyboardMarkup([
+          [InlineKeyboardButton(f"📊 Status 📊", callback_data=f'frwd_status_{i.id}')],
+          [InlineKeyboardButton('❌ Cancel ❌', f'cancel_task_{i.id}')]
+        ])
+    else:
+        # Final message has no buttons
+        text = f"✅ **Task Completed!**\n\n**Processed:** `{i.fetched}`\n**Forwarded:** `{i.total_files}`"
+        if status == "cancelled":
+            text = "❌ **Task Cancelled!**"
    
     await msg_edit(msg, text, button)
    
 async def is_cancelled(client, user, msg, sts, task_id):
     if temp.CANCEL.get(task_id):
         await edit_progress(msg, sts, "cancelled")
-        await send(client, user, "❌ Forwarding Process Cancelled")
+        await send(bot, user, "❌ Forwarding Process Cancelled")
         return True
     return False
 
@@ -228,18 +261,23 @@ async def send(bot, user, text):
    except: pass 
      
 def custom_caption(msg, caption):
-  if not caption or not msg.media:
-      return (msg.caption or "").html if msg.caption else ""
+    if not msg: return ""
+    # This function now safely handles text-only messages
+    if not msg.media:
+        return (msg.text or "").html if msg.text else ""
 
-  media = getattr(msg, msg.media.value, None)
-  if not media:
-      return (msg.caption or "").html if msg.caption else ""
+    media = getattr(msg, msg.media.value, None)
+    if not media:
+        return (msg.caption or "").html if msg.caption else ""
       
-  file_name = getattr(media, 'file_name', '')
-  file_size = get_size(getattr(media, 'file_size', 0))
-  fcaption = (msg.caption or "").html if msg.caption else ""
+    file_name = getattr(media, 'file_name', '')
+    file_size = get_size(getattr(media, 'file_size', 0))
+    fcaption = (msg.caption or "").html if msg.caption else ""
   
-  return caption.format(filename=file_name, size=file_size, caption=fcaption)
+    if caption:
+        return caption.format(filename=file_name, size=file_size, caption=fcaption)
+    return fcaption
+
 
 def get_size(size):
   try:
@@ -254,7 +292,12 @@ def get_size(size):
   except: return "N/A"
 
 def media(msg):
-  return getattr(getattr(msg, msg.media.value, None), 'file_id', None)
+    # Safely get file_id
+    if msg and msg.media:
+        media_obj = getattr(msg, msg.media.value, None)
+        if media_obj:
+            return getattr(media_obj, 'file_id', None)
+    return None
 
 def retry_btn(id):
     return InlineKeyboardMarkup([[InlineKeyboardButton('Retry', f"start_public_{id}")]])
