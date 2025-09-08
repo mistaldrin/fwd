@@ -8,7 +8,7 @@ from database import db
 from config import temp
 from translation import Translation
 from pyrogram import Client, filters, enums
-from pyrogram.exceptions import StopPropagation
+from pyrogram.errors import StopPropagation
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ def parse_message_input(message):
         return None, None, "Invalid input. A message link or forwarded message is required."
 
     if message.text and not message.forward_date:
-        regex = re.compile(r"(https://)?(t\.me/|telegram\.me/|telegram\.dog/)(c/)?(\d+|[a-zA-Z_0-9]+)/(\d+)$")
+        regex = re.compile(r"(https://)?(t\.me/|telegram\.me/|telegram\.dog/)(c/)?(\d+|[a-zA-Z_0_9]+)/(\d+)$")
         match = regex.match(message.text.replace("?single", ""))
         if not match:
             return None, None, 'Invalid Link.'
