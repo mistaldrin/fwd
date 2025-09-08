@@ -178,13 +178,13 @@ async def active_tasks_command(bot, message):
         from_chat = details.get("from", "N/A")
         to_chat = details.get("to", "N/A")
         
-        text += f"<b>Task ID:</b> <code>{task_id}</code>\n"
+        text += f"<b>Task ID:</b> <code>{task_id[:8]}...</code>\n"
         text += f"  - <b>Type:</b> {task_type}\n"
         text += f"  - <b>From:</b> {from_chat}\n"
         if to_chat != "N/A":
             text += f"  - <b>To:</b> {to_chat}\n"
         
-        buttons.append([InlineKeyboardButton(f"❌ Cancel Task: {task_id}", callback_data=f"cancel_task_{task_id}")])
+        buttons.append([InlineKeyboardButton(f"❌ Cancel Task: {task_id[:8]}...", callback_data=f"cancel_task_{task_id}")])
 
     await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
 
@@ -204,13 +204,13 @@ async def active_tasks_cb(bot, query):
         from_chat = details.get("from", "N/A")
         to_chat = details.get("to", "N/A")
         
-        text += f"<b>Task ID:</b> <code>{task_id}</code>\n"
+        text += f"<b>Task ID:</b> <code>{task_id[:8]}...</code>\n"
         text += f"  - <b>Type:</b> {task_type}\n"
         text += f"  - <b>From:</b> {from_chat}\n"
         if to_chat != "N/A":
             text += f"  - <b>To:</b> {to_chat}\n\n"
         
-        buttons.append([InlineKeyboardButton(f"❌ Cancel Task: {task_id}", callback_data=f"cancel_task_{task_id}")])
+        buttons.append([InlineKeyboardButton(f"❌ Cancel Task: {task_id[:8]}...", callback_data=f"cancel_task_{task_id}")])
     
     buttons.append([InlineKeyboardButton('« Back', callback_data='help')])
     await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
