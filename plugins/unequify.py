@@ -2,13 +2,16 @@ import os
 import asyncio
 import io
 import random
+import time
+import math
+from uuid import uuid4
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from pyrogram.enums import ChatMemberStatus, ParseMode
 from pyrogram.errors import FloodWait, ChannelInvalid, UsernameNotOccupied, UsernameInvalid, PeerIdInvalid, UserAlreadyParticipant
 
 from .test import CLIENT
-from .utils import start_range_selection
+from .utils import start_range_selection, get_readable_time
 from translation import Translation
 from config import temp
 from database import db
@@ -179,54 +182,64 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
         await start_deduplication(bot, query, selection_state, session_id)
 
 async def start_deduplication(bot: Client, callback_query: CallbackQuery, selection_state: str, session_id: str):
-    status_message = await bot.send_message(callback_query.from_user.id, "`Processing...`")
     user_id = callback_query.from_user.id
+    task_id = str(uuid4()) # Unique ID for this task
     
     range_session = temp.RANGE_SESSIONS.pop(session_id, None)
     if not range_session:
-        return await status_message.edit("Error: Session expired or invalid.")
+        return await bot.send_message(user_id, "Error: Session expired or invalid.")
 
     userbot_id = temp.UNEQUIFY_USERBOT_ID.pop(user_id, None)
     if not userbot_id:
-        return await status_message.edit("Error: Bot selection lost.")
+        return await bot.send_message(user_id, "Error: Bot selection lost.")
 
     userbot_config = await db.get_bot(user_id, userbot_id)
     if not userbot_config:
-        return await status_message.edit("Error: Userbot not found.")
+        return await bot.send_message(user_id, "Error: Userbot not found.")
 
     target_channel, start_id, end_id = range_session['from_chat_id'], min(range_session['start_id'], range_session['end_id']), max(range_session['start_id'], range_session['end_id'])
     
-    await status_message.edit(f"`Initializing userbot session...`")
+    status_message = await bot.send_message(user_id, "`Initializing...`")
+    
+    # --- Register the task ---
+    if user_id not in temp.ACTIVE_TASKS:
+        temp.ACTIVE_TASKS[user_id] = {}
+    temp.ACTIVE_TASKS[user_id][task_id] = {
+        "process": status_message,
+        "details": {"type": "Deduplication", "from": range_session['from_title'], "to": "N/A"}
+    }
+    temp.CANCEL[task_id] = False
+    temp.lock[user_id] = True
 
     seen_identifiers, duplicates_to_delete = set(), []
     total_scanned, total_deleted = 0, 0
     total_in_range = abs(end_id - start_id) + 1
+    start_time = time.time()
 
     try:
         async with CLIENT().client(userbot_config) as userbot:
-            chat = await userbot.get_chat(target_channel)
             message_ids_to_scan = list(range(start_id, end_id + 1))
 
             for i in range(0, len(message_ids_to_scan), 200):
+                if temp.CANCEL.get(task_id):
+                    await status_message.edit("✓ **Deduplication Cancelled!**")
+                    break
+                
                 chunk = message_ids_to_scan[i:i+200]
-                messages = await userbot.get_messages(chat.id, chunk)
+                messages = await userbot.get_messages(target_channel, chunk)
 
                 for msg in messages:
                     if not msg: continue
                     total_scanned += 1
                     identifier = None
                     
-                    if selection_state[0] == '1' and msg.text: 
-                        identifier = msg.text.strip()
+                    if selection_state[0] == '1' and msg.text: identifier = msg.text.strip()
                     elif selection_state[1] == '1' and (msg.photo or msg.video):
                         media_obj = msg.photo or msg.video
                         if media_obj: identifier = getattr(media_obj, 'file_unique_id', None)
-                    elif selection_state[2] == '1' and msg.audio: 
-                        identifier = msg.audio.file_unique_id
-                    elif selection_state[3] == '1' and msg.document: 
-                        identifier = msg.document.file_unique_id
-                    elif selection_state[4] == '1' and msg.sticker: 
-                        identifier = msg.sticker.file_unique_id
+                    elif selection_state[2] == '1' and msg.audio: identifier = msg.audio.file_unique_id
+                    elif selection_state[3] == '1' and msg.document: identifier = msg.document.file_unique_id
+                    elif selection_state[4] == '1' and msg.sticker: identifier = msg.sticker.file_unique_id
 
                     if identifier and identifier in seen_identifiers:
                         duplicates_to_delete.append(msg.id)
@@ -234,19 +247,63 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
                         seen_identifiers.add(identifier)
 
                 if len(duplicates_to_delete) >= 100:
-                    await userbot.delete_messages(chat_id=chat.id, message_ids=duplicates_to_delete)
+                    await userbot.delete_messages(chat_id=target_channel, message_ids=duplicates_to_delete)
                     total_deleted += len(duplicates_to_delete)
                     duplicates_to_delete.clear()
-                    try:
-                        progress_text = f"Scanned: {total_scanned}/{total_in_range}, Deleted: {total_deleted}"
-                        await status_message.edit(Translation.DUPLICATE_TEXT.format(total=total_in_range, scanned=total_scanned, deleted=total_deleted, progress=progress_text))
-                    except FloodWait: pass
                     await asyncio.sleep(5)
 
-            if duplicates_to_delete:
-                await userbot.delete_messages(chat_id=chat.id, message_ids=duplicates_to_delete)
-                total_deleted += len(duplicates_to_delete)
+                # Update progress
+                if i % (200 * 5) == 0: # Update every 5 chunks
+                    await edit_unequify_progress(status_message, total_scanned, total_deleted, total_in_range, start_time, task_id, "running")
 
-            await status_message.edit(f"✓ **Deduplication Complete!**\n\n**Messages Scanned:** `{total_scanned}`\n**Duplicates Deleted:** `{total_deleted}`")
+            if duplicates_to_delete:
+                await userbot.delete_messages(chat_id=target_channel, message_ids=duplicates_to_delete)
+                total_deleted += len(duplicates_to_delete)
+            
+            if not temp.CANCEL.get(task_id):
+                await edit_unequify_progress(status_message, total_scanned, total_deleted, total_in_range, start_time, task_id, "completed")
     except Exception as e:
         await status_message.edit(f"❌ **An unexpected error occurred.**\n\n`{e}`")
+    finally:
+        # Unregister task
+        if temp.ACTIVE_TASKS.get(user_id, {}).get(task_id):
+            del temp.ACTIVE_TASKS[user_id][task_id]
+        temp.CANCEL.pop(task_id, None)
+        temp.lock.pop(user_id, None)
+
+
+async def edit_unequify_progress(msg, scanned, deleted, total, start_time, task_id, status):
+    now = time.time()
+    diff = now - start_time
+    if diff == 0: diff = 1
+    
+    speed = scanned / diff
+    if speed == 0: speed = 1
+    
+    eta_seconds = (total - scanned) / speed
+    eta = get_readable_time(int(eta_seconds))
+    
+    percentage = "{:.2f}".format(scanned * 100 / total) if total > 0 else "0.00"
+    progress = "▰{0}▱".format('▰' * (math.floor(float(percentage) / 10) -1) if float(percentage) > 10 else '')
+
+    text = Translation.DUPLICATE_TEXT.format(
+        scanned=scanned,
+        total=total,
+        deleted=deleted,
+        status=status,
+        percentage=percentage,
+        progress_bar=progress,
+        eta=eta,
+        speed=round(speed, 2)
+    )
+
+    button = None
+    if status not in ["cancelled", "completed"]:
+      button = InlineKeyboardMarkup([[InlineKeyboardButton('❌ Cancel Task', f'cancel_task_{task_id}')]])
+    
+    try:
+        await msg.edit_text(text, reply_markup=button)
+    except MessageNotModified:
+        pass
+    except Exception as e:
+        print(f"Error updating unequify progress: {e}")
