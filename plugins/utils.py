@@ -51,7 +51,7 @@ class STS:
             'duplicate': 0, 'total': abs(end_id - start_id) + 1, 'start': tm.time()
         }
         self.get(full=True)
-        return self
+        return STS(self.id)
 
     def get(self, value=None, full=False):
         values = self.data.get(self.id)
