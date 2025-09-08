@@ -61,7 +61,7 @@ Ready? Use /forward to begin. (ﾉ´ヮ`)ﾉ*:･ﾟ✧"""
   
   RANGE_SELECTION_TXT = """<b>֎ Message Range ֎</b>
 
-The range is set to start from message <code>1</code> to your selected end point.
+The range is set from message <code>{start}</code> to <code>{end}</code>.
 
 You can confirm to start, or edit the range below."""
 
