@@ -52,8 +52,8 @@ async def unequify_start(bot: Client, message: Message):
     """
     user_id = message.from_user.id
     if temp.lock.get(user_id):
-        return await message.reply("A task is already in progress. Please wait for it to complete before starting a new one.")
-    
+        return await message.reply("A task is already in progress. Please wait for it to complete.")
+
     temp.USER_STATES.pop(user_id, None) # Clear previous states
     
     ban_status = await db.get_ban_status(user_id)
@@ -64,42 +64,43 @@ async def unequify_start(bot: Client, message: Message):
     if not userbots:
         return await message.reply_text("Add a userbot to proceed.\n( >⁠.⁠< ) --> /settings")
 
+    # Store the command arguments for later use
+    command_args = message.command[1:] if len(message.command) > 1 else []
+    temp.USER_STATES[user_id] = {"command_args": command_args}
+
     if len(userbots) > 1:
         buttons = [[InlineKeyboardButton(ub['name'], callback_data=f"uneq_select_ub_{ub['id']}")] for ub in userbots]
         buttons.append([InlineKeyboardButton("« Cancel", callback_data="close_btn")])
         await message.reply_photo(photo=random.choice(SYD), caption="<b>Select a Userbot</b>", reply_markup=InlineKeyboardMarkup(buttons))
         return
-    
-    # If there's a target in the command (e.g., /unequify @channel)
-    if len(message.command) > 1:
-        target = message.command[1]
-        await process_unequify_target(bot, message, user_id, userbots[0]['id'], target)
-    else:
-        await unequify_continue(bot, message, user_id, userbots[0]['id'])
 
+    await process_userbot_selection(bot, message, user_id, userbots[0]['id'])
 
 @Client.on_callback_query(filters.regex("^uneq_select_ub_"))
 async def cb_select_userbot_unequify(bot: Client, query: CallbackQuery):
     userbot_id = int(query.data.split('_')[-1])
     await query.message.delete()
-    
-    # Check if original message had a target
-    target = None
-    original_message = query.message.reply_to_message or query.message
-    if len(original_message.command) > 1:
-        target = original_message.command[1]
-    
-    if target:
-        await process_unequify_target(bot, original_message, query.from_user.id, userbot_id, target)
-    else:
-        await unequify_continue(bot, original_message, query.from_user.id, userbot_id)
+    await process_userbot_selection(bot, query.message, query.from_user.id, userbot_id)
 
+async def process_userbot_selection(bot: Client, message: Message, user_id: int, userbot_id: int):
+    """Continues the /unequify flow after a userbot is selected."""
+    temp.UNEQUIFY_USERBOT_ID[user_id] = userbot_id
+    state_info = temp.USER_STATES.get(user_id, {})
+    command_args = state_info.get("command_args", [])
+
+    if command_args:
+        target = command_args[0]
+        await process_unequify_target(bot, message, user_id, userbot_id, target)
+    else:
+        await unequify_continue(bot, message, user_id, userbot_id)
 
 async def process_unequify_target(bot: Client, message: Message, user_id: int, userbot_id: int, target_channel_input: str):
     """Processes the target channel provided and starts the range selection."""
+    status_msg = await message.reply("`Verifying target channel...`")
     try:
         userbot_config = await db.get_bot(user_id, userbot_id)
-        if not userbot_config: return await message.reply("Selected userbot not found.")
+        if not userbot_config: 
+            return await status_msg.edit("Selected userbot not found.")
 
         async with CLIENT().client(userbot_config) as temp_client:
             chat = await temp_client.get_chat(target_channel_input)
@@ -107,11 +108,12 @@ async def process_unequify_target(bot: Client, message: Message, user_id: int, u
             async for last_message in temp_client.get_chat_history(chat.id, limit=1):
                 last_msg_id = last_message.id
                 break
+            await status_msg.delete()
             await start_range_selection(bot, message, from_chat_id=chat.id, from_title=chat.title, to_chat_id=None, start_id=1, end_id=last_msg_id, final_callback_prefix="uneq_final")
     except (UsernameInvalid, PeerIdInvalid, ChannelInvalid, UsernameNotOccupied) as e:
-        await message.reply(f"Could not find the chat: `{e}`. Please check the username/ID and ensure your userbot is a member.")
+        await status_msg.edit(f"Could not find the chat: `{e}`. Please check the username/ID and ensure your userbot is a member.")
     except Exception as e:
-        await message.reply(f"An error occurred: {e}")
+        await status_msg.edit(f"An error occurred: {e}")
 
 
 async def unequify_continue(bot: Client, message: Message, user_id: int, userbot_id: int):
@@ -128,23 +130,15 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
     user_id = query.from_user.id
     data = query.data.split("_", 1)[1]
     
-    await query.message.delete() # Clean up the prompt
+    await query.message.delete()
 
     if data == "manual":
-        try:
-            ask_msg = await bot.ask(user_id, "Send the channel username or ID.", timeout=300)
-            target = ask_msg.text
-            userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
-            if not userbot_id:
-                return await ask_msg.reply("Userbot selection lost. Please start over.")
-            await process_unequify_target(bot, ask_msg, user_id, userbot_id, target)
-        except asyncio.TimeoutError:
-            await bot.send_message(user_id, "Process timed out.")
-
+        temp.USER_STATES[user_id] = {"state": "awaiting_unequify_manual_target"}
+        await bot.send_message(user_id, "Send the channel username or ID.")
 
     elif data == "select_from_ub":
         userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
-        if not userbot_id: return await bot.send_message(user_id, "Error: Bot selection lost.")
+        if not userbot_id: return await bot.send_message(user_id, "Error: Bot selection lost. Please start over.")
         
         userbot_config = await db.get_bot(user_id, userbot_id)
         if not userbot_config: return await bot.send_message(user_id, "Userbot not found.")
@@ -154,27 +148,22 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
         chats, serial, text = {}, 1, "Reply with the number or Chat ID of the target channel.\n\n"
         try:
             async with CLIENT().client(userbot_config) as userbot:
-                async for dialog in userbot.get_dialogs(limit=50): # Limit to 50 for performance
+                async for dialog in userbot.get_dialogs(limit=50):
                     chats[str(serial)] = dialog.chat
                     chats[str(dialog.chat.id)] = dialog.chat
                     text += f"<b>{serial}.</b> {dialog.chat.title} (<code>{dialog.chat.id}</code>)\n"
                     serial += 1
             
-            await status_msg.delete() # Remove "Fetching" message
+            await status_msg.delete()
             
-            try:
-                ask_msg = await bot.ask(user_id, text, timeout=300, parse_mode=ParseMode.HTML)
-                selected_chat = chats.get(ask_msg.text.strip())
-                if not selected_chat:
-                    return await ask_msg.reply("Invalid selection. Please start over.")
-                
-                await process_unequify_target(bot, ask_msg, user_id, userbot_id, selected_chat.id)
-
-            except asyncio.TimeoutError:
-                await bot.send_message(user_id, "Process timed out.")
-
+            # Set state to await user's numeric/ID reply
+            temp.USER_STATES[user_id] = {
+                "state": "awaiting_unequify_chat_selection",
+                "chats": chats,
+                "prompt_message": await bot.send_message(user_id, text, parse_mode=ParseMode.HTML)
+            }
         except Exception as e:
-            await bot.send_message(user_id, f"An error occurred: `{e}`")
+            await status_msg.edit(f"An error occurred: `{e}`")
 
     elif data.startswith("toggle_"):
         _, current_state, index_str, session_id = data.split("_", 3)
@@ -190,26 +179,19 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
         await start_deduplication(bot, query, selection_state, session_id)
 
 async def start_deduplication(bot: Client, callback_query: CallbackQuery, selection_state: str, session_id: str):
+    status_message = await bot.send_message(callback_query.from_user.id, "`Processing...`")
     user_id = callback_query.from_user.id
-    if temp.lock.get(user_id):
-        return await callback_query.answer("Another task is already in progress.", show_alert=True)
-
-    temp.lock[user_id] = True
-    status_message = await bot.send_message(user_id, "`Processing...`")
     
     range_session = temp.RANGE_SESSIONS.pop(session_id, None)
     if not range_session:
-        temp.lock[user_id] = False
         return await status_message.edit("Error: Session expired or invalid.")
 
     userbot_id = temp.UNEQUIFY_USERBOT_ID.pop(user_id, None)
     if not userbot_id:
-        temp.lock[user_id] = False
         return await status_message.edit("Error: Bot selection lost.")
 
     userbot_config = await db.get_bot(user_id, userbot_id)
     if not userbot_config:
-        temp.lock[user_id] = False
         return await status_message.edit("Error: Userbot not found.")
 
     target_channel, start_id, end_id = range_session['from_chat_id'], min(range_session['start_id'], range_session['end_id']), max(range_session['start_id'], range_session['end_id'])
@@ -268,5 +250,3 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
             await status_message.edit(f"✓ **Deduplication Complete!**\n\n**Messages Scanned:** `{total_scanned}`\n**Duplicates Deleted:** `{total_deleted}`")
     except Exception as e:
         await status_message.edit(f"❌ **An unexpected error occurred.**\n\n`{e}`")
-    finally:
-        temp.lock[user_id] = False # Release the lock
