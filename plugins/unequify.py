@@ -79,15 +79,17 @@ async def unequify_start(bot: Client, message: Message):
 async def cb_select_userbot_unequify(bot: Client, query: CallbackQuery):
     userbot_id = int(query.data.split('_')[-1])
     await query.message.delete()
+    
     # Check if original message had a target
     target = None
-    if query.message.reply_to_message and len(query.message.reply_to_message.command) > 1:
-        target = query.message.reply_to_message.command[1]
+    original_message = query.message.reply_to_message or query.message
+    if len(original_message.command) > 1:
+        target = original_message.command[1]
     
     if target:
-        await process_unequify_target(bot, query.message, query.from_user.id, userbot_id, target)
+        await process_unequify_target(bot, original_message, query.from_user.id, userbot_id, target)
     else:
-        await unequify_continue(bot, query.message, query.from_user.id, userbot_id)
+        await unequify_continue(bot, original_message, query.from_user.id, userbot_id)
 
 
 async def process_unequify_target(bot: Client, message: Message, user_id: int, userbot_id: int, target_channel_input: str):
@@ -103,8 +105,8 @@ async def process_unequify_target(bot: Client, message: Message, user_id: int, u
                 last_msg_id = last_message.id
                 break
             await start_range_selection(bot, message, from_chat_id=chat.id, from_title=chat.title, to_chat_id=None, start_id=1, end_id=last_msg_id, final_callback_prefix="uneq_final")
-    except (UsernameInvalid, PeerIdInvalid, ChannelInvalid) as e:
-        await message.reply(f"Could not find the chat: `{e}`.")
+    except (UsernameInvalid, PeerIdInvalid, ChannelInvalid, UsernameNotOccupied) as e:
+        await message.reply(f"Could not find the chat: `{e}`. Please check the username/ID and ensure your userbot is a member.")
     except Exception as e:
         await message.reply(f"An error occurred: {e}")
 
@@ -155,10 +157,10 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
                     text += f"<b>{serial}.</b> {dialog.chat.title} (<code>{dialog.chat.id}</code>)\n"
                     serial += 1
             
-            await status_msg.edit_text(text, parse_mode=ParseMode.HTML)
+            await status_msg.delete() # Remove "Fetching" message
             
             try:
-                ask_msg = await bot.ask(user_id, "Select a chat by replying with its number or ID.", timeout=300)
+                ask_msg = await bot.ask(user_id, text, timeout=300, parse_mode=ParseMode.HTML)
                 selected_chat = chats.get(ask_msg.text.strip())
                 if not selected_chat:
                     return await ask_msg.reply("Invalid selection. Please start over.")
@@ -169,7 +171,7 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
                 await bot.send_message(user_id, "Process timed out.")
 
         except Exception as e:
-            await status_msg.edit(f"An error occurred: `{e}`")
+            await bot.send_message(user_id, f"An error occurred: `{e}`")
 
     elif data.startswith("toggle_"):
         _, current_state, index_str, session_id = data.split("_", 3)
@@ -181,7 +183,6 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
         await query.answer()
 
     elif data.startswith("startscan_"):
-        await query.message.delete()
         _, selection_state, session_id = data.split("_", 2)
         await start_deduplication(bot, query, selection_state, session_id)
 
@@ -222,14 +223,20 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
                     if not msg: continue
                     total_scanned += 1
                     identifier = None
-
-                    if selection_state[0] == '1' and msg.text: identifier = msg.text.strip()
-                    elif selection_state[1] == '1' and (msg.photo or msg.video) and hasattr(msg, 'media') and msg.media:
-                        media_obj = getattr(msg, msg.media.value, None)
+                    
+                    # --- FIXED DEDUPLICATION LOGIC ---
+                    if selection_state[0] == '1' and msg.text: 
+                        identifier = msg.text.strip()
+                    elif selection_state[1] == '1' and (msg.photo or msg.video):
+                        media_obj = msg.photo or msg.video
                         if media_obj: identifier = getattr(media_obj, 'file_unique_id', None)
-                    elif selection_state[2] == '1' and msg.audio: identifier = msg.audio.file_unique_id
-                    elif selection_state[3] == '1' and msg.document: identifier = msg.document.file_unique_id
-                    elif selection_state[4] == '1' and msg.sticker: identifier = msg.sticker.file_unique_id
+                    elif selection_state[2] == '1' and msg.audio: 
+                        identifier = msg.audio.file_unique_id
+                    elif selection_state[3] == '1' and msg.document: 
+                        identifier = msg.document.file_unique_id
+                    elif selection_state[4] == '1' and msg.sticker: 
+                        identifier = msg.sticker.file_unique_id
+                    # --- END OF FIX ---
 
                     if identifier and identifier in seen_identifiers:
                         duplicates_to_delete.append(msg.id)
@@ -241,7 +248,8 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
                     total_deleted += len(duplicates_to_delete)
                     duplicates_to_delete.clear()
                     try:
-                        await status_message.edit(Translation.DUPLICATE_TEXT.format(total=total_in_range, scanned=total_scanned, deleted=total_deleted, progress="..."))
+                        progress_text = f"Scanned: {total_scanned}/{total_in_range}, Deleted: {total_deleted}"
+                        await status_message.edit(Translation.DUPLICATE_TEXT.format(total=total_in_range, scanned=total_scanned, deleted=total_deleted, progress=progress_text))
                     except FloodWait: pass
                     await asyncio.sleep(5)
 
