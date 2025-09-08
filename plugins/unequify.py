@@ -167,7 +167,7 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
             await status_msg.edit(f"An error occurred: `{e}`")
 
     elif data.startswith("toggle_"):
-        _, current_state, index_str, session_id = data.split("_", 3)
+        _, current_state, index_str, session_id = data.split("_", 2)
         index = int(index_str)
         state_list = list(current_state)
         state_list[index] = '1' if state_list[index] == '0' else '0'
