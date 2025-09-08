@@ -8,7 +8,7 @@ from database import db
 from config import temp
 from translation import Translation
 from pyrogram import Client, filters, enums
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,7 @@ async def run(bot, message):
     if temp.lock.get(user_id):
         return await message.reply("A task is already in progress. Please wait for it to complete before starting a new one.")
     
+    # Clear any previous stale state
     temp.USER_STATES.pop(user_id, None)
 
     bots = await db.get_bots(user_id)
@@ -73,35 +74,105 @@ async def prompt_target_channel(bot, message):
 
 @Client.on_callback_query(filters.regex(r'^fwd_target_'))
 async def cb_select_target(bot, query):
+    """
+    Handles target channel selection. Sets user state to await source message.
+    """
     user_id = query.from_user.id
     to_chat_id = int(query.data.split('_')[-1])
     
-    await query.message.delete() # Clean up the button message
+    # Set the user's state to wait for the next message (the source)
+    temp.USER_STATES[user_id] = {
+        "state": "awaiting_source",
+        "to_chat_id": to_chat_id,
+        "prompt_message_id": query.message.id
+    }
+    
+    # Edit the message to ask for the source channel
+    await query.message.edit_text(Translation.FROM_MSG)
 
-    try:
-        from_message = await bot.ask(user_id, Translation.FROM_MSG, timeout=300)
+
+# --- NEW High-Priority Stateful Message Handler ---
+@Client.on_message(filters.private & ~filters.command() & ~filters.edited, group=-1)
+async def stateful_message_handler(bot: Client, message: Message):
+    """
+    This handler checks for user states and processes messages accordingly.
+    It runs before other handlers due to group=-1.
+    """
+    user_id = message.from_user.id
+    state_info = temp.USER_STATES.get(user_id)
+
+    # If user has no state, do nothing and let other handlers run
+    if not state_info:
+        return
+
+    current_state = state_info.get("state")
+
+    # --- State: Awaiting Source for /forward ---
+    if current_state == "awaiting_source":
+        await message.delete() # delete the user's reply
+        try:
+            await bot.delete_messages(user_id, state_info["prompt_message_id"])
+        except Exception:
+            pass
+
+        to_chat_id = state_info["to_chat_id"]
+        from_chat_id, end_id, error = parse_message_input(message)
         
-        if from_message.text and from_message.text.lower() == "/cancel":
-            return await from_message.reply(Translation.CANCEL)
-
-        from_chat_id, end_id, error = parse_message_input(from_message)
+        temp.USER_STATES.pop(user_id, None)
         
         if error:
-            return await from_message.reply(error)
+            await bot.send_message(user_id, error)
+            return
 
         start_id = 1
         
         try:
-            # Use the main bot client to get public channel info
             chat_info = await bot.get_chat(from_chat_id)
             from_title = chat_info.title
         except Exception:
-            from_title = "Private/Unknown Chat" # Fallback for private chats
+            from_title = "Private/Unknown Chat"
         
-        await start_range_selection(bot, from_message, from_chat_id, from_title, to_chat_id, start_id, end_id)
+        await start_range_selection(bot, message, from_chat_id, from_title, to_chat_id, start_id, end_id)
 
-    except asyncio.TimeoutError:
-        await bot.send_message(user_id, "Process timed out. Please start over.")
+    # --- State: Awaiting Manual Target for /unequify ---
+    elif current_state == "awaiting_unequify_manual_target":
+        await message.delete()
+        target = message.text
+        userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
+        
+        temp.USER_STATES.pop(user_id, None)
+
+        if not userbot_id:
+            await bot.send_message(user_id, "Userbot selection lost. Please start over.")
+            return
+
+        from plugins.unequify import process_unequify_target
+        await process_unequify_target(bot, message, user_id, userbot_id, target)
+
+    # --- State: Awaiting Chat Selection for /unequify ---
+    elif current_state == "awaiting_unequify_chat_selection":
+        await message.delete()
+        try:
+            await bot.delete_messages(user_id, state_info["prompt_message"]["id"])
+        except Exception:
+            pass
+
+        chats = state_info.get("chats", {})
+        selected_chat = chats.get(message.text.strip())
+        
+        temp.USER_STATES.pop(user_id, None)
+
+        if not selected_chat:
+            await bot.send_message(user_id, "Invalid selection. Please start over.")
+            return
+
+        userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
+        if not userbot_id:
+            await bot.send_message(user_id, "Userbot selection lost. Please start over.")
+            return
+        
+        from plugins.unequify import process_unequify_target
+        await process_unequify_target(bot, message, user_id, userbot_id, selected_chat.id)
 
 
 # --- Callbacks for Interactive Range Selection ---
