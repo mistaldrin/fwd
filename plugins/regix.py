@@ -39,11 +39,13 @@ async def pub_(bot, cb):
     if not _bot:
       return await msg_edit(m, "You haven't added a bot/userbot. Please do so in /settings.", wait=True)
 
+    await msg_edit(m, "Starting client...")
     try:
       client = await start_clone_bot(CLIENT.client(_bot), _bot)
     except Exception as e:  
       return await m.edit(f"Failed to start client: {e}")
 
+    await msg_edit(m, "Accessing channels...")
     try: 
        from_chat_details = await client.get_chat(i.FROM)
        to_chat_details = await client.get_chat(i.TO)
@@ -69,10 +71,11 @@ async def pub_(bot, cb):
     try:
         messages_to_process = []
         
+        await msg_edit(m, "Fetching message list...")
         if _bot.get('is_bot', False):
             start_point = min(i.start_id, i.end_id)
             end_point = max(i.start_id, i.end_id)
-            async for message in client.iter_messages(chat_id=i.FROM, limit=end_point, offset=start_point):
+            async for message in client.iter_messages(client, chat_id=i.FROM, limit=end_point, offset=start_point):
                  if message: messages_to_process.append(message)
         else:
             start_point = max(i.start_id, i.end_id)
