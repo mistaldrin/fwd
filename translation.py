@@ -78,29 +78,26 @@ Manual input: `/unequify [channel_username_or_id]`"""
   BOT_DETAILS = "<b>֎ Bot Details ֎</b>\n\n● <b>Name:</b> <code>{}</code>\n● <b>ID:</b> <code>{}</code>\n● <b>Username:</b> {}"
   USER_DETAILS = "<b>֎ Userbot Details ֎</b>\n\n● <b>Name:</b> <code>{}</code>\n● <b>ID:</b> <code>{}</code>\n● <b>Username:</b> {}"  
          
-  TEXT = """<b>֎ Forwarding Status ֎</b>
+  TEXT = """**Forwarding Task Started!** 🚀
 
-● <b>Status:</b> <code>{status}</code>
-● <b>Processed:</b> <code>{fetched}</code> of <code>{total}</code>
-● <b>Forwarded:</b> <code>{forwarded}</code>
-● <b>Duplicates:</b> <code>{duplicate}</code>
-● <b>Deleted/Skipped:</b> <code>{deleted}</code>
-● <b>Speed:</b> <code>{speed} msg/s</code>
-● <b>ETA:</b> <code>{eta}</code>
-
-{progress_bar} <code>{percentage}%</code>
+`Status: {status}...`
 """
 
-  DUPLICATE_TEXT = """<b>֎ Deduplication Status ֎</b>
+  DUPLICATE_TEXT = """**Deduplication Task Started!** 🗑️
 
-● <b>Status:</b> <code>{status}</code>
-● <b>Scanned:</b> <code>{scanned}</code> of <code>{total}</code>
-● <b>Duplicates Deleted:</b> <code>{deleted}</code>
-● <b>Speed:</b> <code>{speed} msg/s</code>
-● <b>ETA:</b> <code>{eta}</code>
-
-{progress_bar} <code>{percentage}%</code>
+`Status: {status}...`
 """
+
+  STATUS_ALERT = """
+📊 **Real-Time Status** 📊
+
+**Processed:** `{fetched}` of `{total}`
+**Success:** `{forwarded}`
+**Skipped/Deleted:** `{deleted}`
+**Progress:** `{percentage}%`
+**ETA:** `{eta}`
+"""
+
   DOUBLE_CHECK = """<b>֎ Final Check ֎</b>
 
 Here's the plan:
