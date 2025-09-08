@@ -51,9 +51,32 @@ def parse_buttons(text, markup=True):
        buttons = InlineKeyboardMarkup(buttons)
     return buttons if buttons else None
 
-async def start_clone_bot(FwdBot, data=None):
-   """Starts the client."""
+async def start_clone_bot(FwdBot):
+   """Starts the client and patches the iter_messages method for bot compatibility."""
    await FwdBot.start()
+   
+   # This is the bot-compatible message iterator from the reference repo
+   async def iter_messages_fixed(
+      self, 
+      chat_id: Union[int, str], 
+      limit: int, 
+      offset: int = 0
+      ) -> Optional[AsyncGenerator["types.Message", None]]:
+        current = offset
+        while True:
+            new_diff = min(200, limit - current)
+            if new_diff <= 0:
+                return
+            # get_messages by ID is bot-compatible
+            messages = await self.get_messages(chat_id, list(range(current, current + new_diff + 1)))
+            for message in messages:
+                yield message
+                current += 1
+
+   # Monkey-patch the client instance with our bot-compatible function
+   if FwdBot.is_bot:
+       FwdBot.iter_messages = iter_messages_fixed.__get__(FwdBot, Client)
+   
    return FwdBot
 
 class CLIENT: 
