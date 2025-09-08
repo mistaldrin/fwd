@@ -7,7 +7,7 @@ from config import Config, temp
 from platform import python_version
 from translation import Translation
 from pyrogram import Client, filters, enums, __version__ as pyrogram_version
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaDocument
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaDocument, Message, CallbackQuery
 from .test import update_configs, CLIENT
 
 SYD = ["https://files.catbox.moe/3lwlbm.png"]
