@@ -58,6 +58,7 @@ async def start_clone_bot(FwdBot, bot_data):
    # This is the bot-compatible message iterator from the reference repo
    async def iter_messages_fixed(
       self, 
+      client, # The first arg is the client instance itself
       chat_id: Union[int, str], 
       limit: int, 
       offset: int = 0
@@ -68,7 +69,6 @@ async def start_clone_bot(FwdBot, bot_data):
             if new_diff <= 0:
                 return
             
-            # get_messages by ID is bot-compatible
             message_ids = list(range(current, current + new_diff))
             messages = await self.get_messages(chat_id, message_ids)
 
@@ -174,7 +174,7 @@ class CLIENT:
 @Client.on_message(filters.private & filters.command('reset'))
 async def reset_user_settings(bot, m):
     """Resets a user's settings to default."""
-    default = await db.get_configs("01") # Using a non-user specific ID to get defaults
+    default = await db.get_configs("01")
     await db.update_configs(m.from_user.id, default)
     await m.reply("Settings have been reset. ✓")
 
@@ -189,7 +189,7 @@ async def reset_all_users_settings(bot, message):
     async for user in users:
         user_id = user['id']
         default = await get_configs(user_id)
-        default['db_uri'] = None # Example: resetting db_uri
+        default['db_uri'] = None
         total += 1
         if total % 10 == 0:
            await sts.edit(TEXT.format(total, success, failed))
