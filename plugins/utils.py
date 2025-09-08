@@ -72,7 +72,10 @@ class STS:
     async def get_data(self, user_id):
         bot_id = temp.FORWARD_BOT_ID.get(user_id)
         if not bot_id:
-            raise ValueError("Bot ID not found in session.")
+            # Fallback to UNEQUIFY_USERBOT_ID if FORWARD_BOT_ID is not set
+            bot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
+            if not bot_id:
+                raise ValueError("Bot ID not found in session.")
 
         bot = await db.get_bot(user_id, bot_id)
         k, filters = self, await db.get_filters(user_id)
@@ -103,11 +106,12 @@ async def start_range_selection(bot, message, from_chat_id, from_title, to_chat_
         'start_id': start_id,
         'end_id': end_id,
         'order': 'asc',
-        'final_callback': final_callback_prefix
+        'final_callback': final_callback_prefix,
+        'original_message_id': message.id # Store the ID of the message that triggered this
     }
     await update_range_message(bot, session_id)
 
-async def update_range_message(bot, session_id, message=None):
+async def update_range_message(bot, session_id, message_to_edit=None):
     """Edits or sends the range selection message as a text message."""
     session = temp.RANGE_SESSIONS.get(session_id)
     if not session: return
@@ -134,11 +138,15 @@ async def update_range_message(bot, session_id, message=None):
     
     try:
         # If a message object is provided, edit it. Otherwise, send a new one.
-        if message:
-            new_message = await message.edit_text(text=text, reply_markup=reply_markup)
+        if message_to_edit:
+            new_message = await message_to_edit.edit_text(text=text, reply_markup=reply_markup)
         else:
-            new_message = await bot.send_message(chat_id=session['chat_id'], text=text,
-                                             reply_markup=reply_markup, quote=True)
+            new_message = await bot.send_message(
+                chat_id=session['chat_id'],
+                text=text,
+                reply_markup=reply_markup,
+                reply_to_message_id=session['original_message_id']
+            )
         session['message_id'] = new_message.id
     except Exception as e:
         logger.error(f"Error sending/editing range message: {e}", exc_info=True)
