@@ -7,7 +7,7 @@ from database import db
 from config import temp
 from translation import Translation
 from .test import parse_buttons
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 STATUS = {}
 SYD = ["https://files.catbox.moe/3lwlbm.png"]
@@ -20,15 +20,15 @@ def get_readable_time(seconds: int) -> str:
     (days, remainder) = divmod(seconds, 86400)
     days = int(days)
     if days != 0:
-        result += f"{days}d"
+        result += f"{days}d "
     (hours, remainder) = divmod(remainder, 3600)
     hours = int(hours)
     if hours != 0:
-        result += f"{hours}h"
+        result += f"{hours}h "
     (minutes, seconds) = divmod(remainder, 60)
     minutes = int(minutes)
     if minutes != 0:
-        result += f"{minutes}m"
+        result += f"{minutes}m "
     seconds = int(seconds)
     if seconds != 0:
         result += f"{seconds}s"
@@ -44,26 +44,33 @@ class STS:
 
     def store(self, From, to, start_id, end_id):
         self.data[self.id] = {
+            "id": self.id, # Store the task id itself for easy access
             "FROM": From, 'TO': to, 'total_files': 0,
             'start_id': start_id, 'end_id': end_id,
             'fetched': 0, 'filtered': 0, 'deleted': 0,
-            'duplicate': 0, 'total': abs(end_id - start_id) + 1, 'start': 0
+            'duplicate': 0, 'total': abs(end_id - start_id) + 1, 'start': tm.time()
         }
         self.get(full=True)
-        return STS(self.id)
+        return self
 
     def get(self, value=None, full=False):
         values = self.data.get(self.id)
+        if not values: return None
         if not full:
            return values.get(value)
         for k, v in values.items():
             setattr(self, k, v)
         return self
+    
+    def get_readable_time(self, seconds: int) -> str:
+        return get_readable_time(seconds)
 
     def add(self, key=None, value=1, time=False):
         if time:
           self.data[self.id].update({'start': tm.time()})
-        self.data[self.id].update({key: self.get(key) + value})
+        current_value = self.get(key)
+        if current_value is not None:
+            self.data[self.id].update({key: current_value + value})
 
     def divide(self, no, by):
        by = 1 if int(by) == 0 else by
@@ -72,7 +79,6 @@ class STS:
     async def get_data(self, user_id):
         bot_id = temp.FORWARD_BOT_ID.get(user_id)
         if not bot_id:
-            # Fallback to UNEQUIFY_USERBOT_ID if FORWARD_BOT_ID is not set
             bot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
             if not bot_id:
                 raise ValueError("Bot ID not found in session.")
@@ -94,7 +100,7 @@ class STS:
             'skip_duplicate': duplicate, 'forward_delay': configs.get('forward_delay', 1.0)
         }, configs['protect'], button
 
-async def start_range_selection(bot, message, from_chat_id, from_title, to_chat_id, start_id, end_id, final_callback_prefix="fwd_final"):
+async def start_range_selection(bot, message: Message, from_chat_id, from_title, to_chat_id, start_id, end_id, final_callback_prefix="fwd_final"):
     """Initiates an interactive message range selection process."""
     session_id = str(uuid4())
     temp.RANGE_SESSIONS[session_id] = {
@@ -107,7 +113,7 @@ async def start_range_selection(bot, message, from_chat_id, from_title, to_chat_
         'end_id': end_id,
         'order': 'asc',
         'final_callback': final_callback_prefix,
-        'original_message_id': message.id # Store the ID of the message that triggered this
+        'original_message_id': message.id
     }
     await update_range_message(bot, session_id)
 
@@ -137,7 +143,6 @@ async def update_range_message(bot, session_id, message_to_edit=None):
     reply_markup = InlineKeyboardMarkup(buttons)
     
     try:
-        # If a message object is provided, edit it. Otherwise, send a new one.
         if message_to_edit:
             new_message = await message_to_edit.edit_text(text=text, reply_markup=reply_markup)
         else:
@@ -151,7 +156,6 @@ async def update_range_message(bot, session_id, message_to_edit=None):
     except Exception as e:
         logger.error(f"Error sending/editing range message: {e}", exc_info=True)
         try:
-            # Inform the user if something goes wrong
             await bot.send_message(session['chat_id'], "An error occurred while displaying the menu. Please try again.")
         except Exception as ie:
             logger.error(f"Failed to send error message to user: {ie}")
