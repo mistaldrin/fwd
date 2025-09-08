@@ -69,7 +69,9 @@ You can confirm to start, or edit the range below."""
 
 Select the target channel.
 
-Manual input: `/unequify [channel_username]`"""
+You can use /ubclist to find the Channel ID.
+
+Manual input: `/unequify [channel_username_or_id]`"""
   
   CANCEL = "Process cancelled. (o˘◡˘o)"
   BOT_DETAILS = "<b>֎ Bot Details ֎</b>\n\n● <b>Name:</b> <code>{}</code>\n● <b>ID:</b> <code>{}</code>\n● <b>Username:</b> {}"
@@ -82,6 +84,7 @@ Manual input: `/unequify [channel_username]`"""
 ● <b>Forwarded:</b> <code>{forwarded}</code>
 ● <b>Duplicates:</b> <code>{duplicate}</code>
 ● <b>Skipped:</b> <code>{skipped}</code>
+● <b>Filtered:</b> <code>{filtered}</code>
 ● <b>Status:</b> <code>{status}</code>
 ● <b>Progress:</b> <code>{percentage}%</code>
 
