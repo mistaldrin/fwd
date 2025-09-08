@@ -17,6 +17,7 @@ Available commands:
 ● /start - Check if alive.
 ● /forward - Forward a range of messages.
 ● /unequify - Remove duplicates from a chat.
+● /tasks - View and manage active tasks.
 ● /ubclist - List all userbot chats.
 ● /settings - Open the configuration menu.
 ● /resetme - A fresh start. Wipes all settings.
@@ -79,25 +80,26 @@ Manual input: `/unequify [channel_username_or_id]`"""
          
   TEXT = """<b>֎ Forwarding Status ֎</b>
 
-● <b>Total in Range:</b> <code>{total}</code>
-● <b>Processed:</b> <code>{fetched}</code>
+● <b>Status:</b> <code>{status}</code>
+● <b>Processed:</b> <code>{fetched}</code> of <code>{total}</code>
 ● <b>Forwarded:</b> <code>{forwarded}</code>
 ● <b>Duplicates:</b> <code>{duplicate}</code>
-● <b>Skipped:</b> <code>{skipped}</code>
-● <b>Filtered:</b> <code>{filtered}</code>
-● <b>Status:</b> <code>{status}</code>
-● <b>Progress:</b> <code>{percentage}%</code>
+● <b>Deleted/Skipped:</b> <code>{deleted}</code>
+● <b>Speed:</b> <code>{speed} msg/s</code>
+● <b>ETA:</b> <code>{eta}</code>
 
-{progress_bar}
+{progress_bar} <code>{percentage}%</code>
 """
 
   DUPLICATE_TEXT = """<b>֎ Deduplication Status ֎</b>
 
-● <b>Total in Range:</b> <code>{total}</code>
-● <b>Messages Scanned:</b> <code>{scanned}</code>
+● <b>Status:</b> <code>{status}</code>
+● <b>Scanned:</b> <code>{scanned}</code> of <code>{total}</code>
 ● <b>Duplicates Deleted:</b> <code>{deleted}</code>
+● <b>Speed:</b> <code>{speed} msg/s</code>
+● <b>ETA:</b> <code>{eta}</code>
 
-{progress}
+{progress_bar} <code>{percentage}%</code>
 """
   DOUBLE_CHECK = """<b>֎ Final Check ֎</b>
 
