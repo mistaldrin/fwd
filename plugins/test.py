@@ -7,7 +7,7 @@ import logging
 from uuid import uuid4
 from database import db 
 from config import Config, temp
-from pyrogram import Client, filters
+from pyrogram import Client, filters, types
 from pyrogram.raw.all import layer
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message 
 from pyrogram.errors.exceptions.bad_request_400 import AccessTokenExpired, AccessTokenInvalid
@@ -64,19 +64,21 @@ async def start_clone_bot(FwdBot, bot_data):
       ) -> Optional[AsyncGenerator["types.Message", None]]:
         current = offset
         while True:
-            new_diff = min(200, limit - current)
+            new_diff = min(100, limit - current) # Batch size of 100
             if new_diff <= 0:
                 return
+            
             # get_messages by ID is bot-compatible
-            messages = await self.get_messages(chat_id, list(range(current, current + new_diff + 1)))
+            message_ids = list(range(current, current + new_diff))
+            messages = await self.get_messages(chat_id, message_ids)
+
             for message in messages:
                 yield message
-                current += 1
+            
+            current += new_diff
 
-   # Monkey-patch the client instance with our bot-compatible function
-   # if the client is a bot
-   if bot_data.get('is_bot', False):
-       FwdBot.iter_messages = iter_messages_fixed.__get__(FwdBot, Client)
+   # Direct assignment, as seen in the working reference repository
+   FwdBot.iter_messages = iter_messages_fixed
    
    return FwdBot
 
