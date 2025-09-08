@@ -4,6 +4,7 @@ import sys
 import typing
 import asyncio 
 import logging 
+from uuid import uuid4
 from database import db 
 from config import Config, temp
 from pyrogram import Client, filters
@@ -19,127 +20,17 @@ from typing import Union, Optional, AsyncGenerator
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-BTN_URL_REGEX = re.compile(r"(\[([^\[]+?)]\[buttonurl:/{0,2}(.+?)(:same)?])")
-BOT_TOKEN_TEXT = "1) Cʀᴇᴀᴛᴇ A Bᴏᴛ Uꜱɪɴɢ @BotFather [ꜱᴇɴᴅ <code>/newbot</code> ᴛᴏ ʙᴏᴛ ꜰᴀᴛʜᴇʀ ᴀɴᴅ ᴛʜᴇ ɴᴀᴍᴇ ᴀɴᴅ ᴜꜱᴇʀɴᴀᴍᴇ ʀᴇꜱᴩᴇᴄᴛɪᴠᴇʟʏ]\n\n2) Tʜᴇɴ Yᴏᴜ Wɪʟʟ Gᴇᴛ A Mᴇꜱꜱᴀɢᴇ Wɪᴛʜ Bᴏᴛ Tᴏᴋᴇɴ\n\n3) Fᴏʀᴡᴀʀᴅ Tʜᴀᴛ Mᴇꜱꜱᴀɢᴇ Tᴏ Mᴇ \n\nIꜰ Yᴏᴜ Hᴀᴠᴇ A Bᴏᴛ Aʟʀᴇᴀᴅʏ, Yᴏᴜ Cᴀɴ Fᴏʀᴡᴀʀᴅ Iᴛꜱ Tᴏᴋᴇɴ Fʀᴏᴍ API Bᴏᴛ Tᴏᴋᴇɴ."
+BOT_TOKEN_TEXT = "1. Go to @BotFather and send `/newbot`.\n\n2. Get the bot token from the reply.\n\n3. Forward that message here or just send the token.\n\n/cancel - to cancel."
+SESSION_STRING_TEXT = "<b>A friendly heads-up!</b> (｡•̀ᴗ-)✧\n\nUsing a user account for automation can be risky. It's a good idea to use an alternate account for this.\n\nThe developer is not responsible for what happens.\n\n<b>Send the Pyrogram (v2) session string.</b>\n\nGet one from @mdsessiongenbot.\n\n/cancel - to cancel."
 SESSION_STRING_SIZE = 351
+BTN_URL_REGEX = re.compile(r"(\[([^\[]+?)]\[buttonurl:/{0,2}(.+?)(:same)?])")
 
 
-async def start_clone_bot(FwdBot):
-   await FwdBot.start()
-   return FwdBot
-
-class CLIENT: 
-  def __init__(self):
-     self.api_id = Config.API_ID
-     self.api_hash = Config.API_HASH
-    
-  def client(self, data, user=None):
-     if user == None and data.get('is_bot') == False:
-        return Client("USERBOT", self.api_id, self.api_hash, session_string=data.get('session'))
-     elif user == True:
-        return Client("USERBOT", self.api_id, self.api_hash, session_string=data)
-     elif user != False:
-        data = data.get('token')
-     return Client("BOT", self.api_id, self.api_hash, bot_token=data, in_memory=True)
-  
-  async def add_bot(self, bot, message):
-     user_id = int(message.from_user.id)
-     msg = await bot.ask(chat_id=user_id, text=BOT_TOKEN_TEXT)
-     if msg.text=='/cancel':
-        return await msg.reply('<b>Pʀᴏᴄᴇꜱꜱ Cᴀɴᴄᴇʟʟᴇᴅ !</b>')
-     elif not msg.forward_date:
-       return await msg.reply_text("Tʜɪꜱ Iꜱ Nᴏᴛ Fᴏʀᴡᴀʀᴅᴇᴅ Mᴇꜱꜱᴀɢᴇ !")
-     elif str(msg.forward_from.id) != "93372553":
-       return await msg.reply_text("Tʜɪꜱ Mᴇꜱꜱᴀɢᴇ Wᴀꜱ Nᴏᴛ Fᴏʀᴡᴀʀᴅᴇᴅ Fʀᴏᴍ Tʜᴇ Bᴏᴛ Fᴀᴛʜᴇʀ !")
-     bot_token = re.findall(r'\d[0-9]{8,10}:[0-9A-Za-z_-]{35}', msg.text, re.IGNORECASE)
-     bot_token = bot_token[0] if bot_token else None
-     if not bot_token:
-       return await msg.reply_text("Tʜᴇʀᴇ Iꜱ No Bᴏᴛ Tᴏᴋᴇɴ Iɴ Tʜᴀᴛ Mᴇꜱꜱᴀɢᴇ !Tʀʏ Aɢᴀɪɴ Pʟᴇᴀꜱᴇ !")
-     try:
-       _client = await start_clone_bot(self.client(bot_token, False))
-     except Exception as e:
-       await msg.reply_text(f"Bot Error :</b> `{e}` /nFᴏʀᴡᴀʀᴅ ɪᴛ ᴛᴏ @Syd_Xyz Iꜰ ʏᴏᴜ ɴᴇᴇᴅ HELP !")
-     _bot = _client.me
-     details = {
-       'id': _bot.id,
-       'is_bot': True,
-       'user_id': user_id,
-       'name': _bot.first_name,
-       'token': bot_token,
-       'username': _bot.username 
-     }
-     await db.add_bot(details)
-     return True
-    
-  async def add_session(self, bot, message):
-     user_id = int(message.from_user.id)
-     text = "<b>⚠️ Dɪꜱᴄʟᴀɪᴍᴇʀ ⚠️</b>\n\nYᴏᴜ Cᴀɴ Uꜱᴇ Yoᴜʀ Sᴇꜱꜱɪᴏɴ Fᴏʀ FᴏʀWᴀʀᴅɪɴɢ Mᴇꜱꜱᴀɢᴇ Fʀᴏᴍ Pʀɪᴠᴀᴛᴇ Cʜᴀᴛ Tᴏ Aɴᴏᴛʜᴇʀ Cʜᴀᴛ.\nPʟᴇᴀꜱᴇ Aᴅᴅ Yᴏᴜʀ <b><u>Pʏʀᴏɢʀᴀᴍ Sᴇꜱꜱɪᴏɴ</u> Wɪᴛʜ Yᴏᴜʀ Oᴡɴ Rɪꜱᴋ </b>. Tʜᴇʀᴇ Iꜱ A Cʜᴀɴᴄᴇ Tᴏ Bᴀɴ Yᴏᴜʀ Aᴄᴄᴏᴜɴᴛ (ꜱᴏ, ꜰᴏᴡᴀʀᴅɪɴɢ ᴡɪʟʟ ʙᴇ ʟɪɪᴛʟᴇ ꜱʟᴏᴡ). Mʏ Dᴇᴠᴇʟᴏᴩᴇʀ <b>Iꜱ Nᴏᴛ Rᴇꜱᴩᴏɴꜱɪʙʟᴇ Iꜰ Yᴏᴜʀ Aᴄᴄᴏᴜɴᴛ Mᴀʏ Gᴇᴛ Bᴀɴɴᴇᴅ! /nUSE THE ACCOUNT WITH WHICH YOU CAN RISK(NOT IMPORTANT).</b>"
-     await bot.send_message(user_id, text=text)
-     msg = await bot.ask(chat_id=user_id, text="<b>Send your pyrogram session.\nget it from @mdsessiongenbot\n\n/cancel - cancel the process</b>")
-     if msg.text=='/cancel':
-        return await msg.reply('<b>Pʀᴏᴄᴇꜱꜱ Cᴀɴᴄᴇʟʟᴇᴅ !</b>')
-     elif len(msg.text) < SESSION_STRING_SIZE:
-        return await msg.reply('Iɴᴠᴀʟɪᴅ Sᴇꜱꜱɪᴏɴ Sᴛʀɪɴɢ !')
-     try:
-       client = await start_clone_bot(self.client(msg.text, True))
-     except Exception as e:
-       await msg.reply_text(f"<b>User Bot Error :</b> `{e}` /nFᴏʀᴡᴀʀᴅ ɪᴛ ᴛᴏ @Syd_Xyz Iꜰ ʏᴏᴜ ɴᴇᴇᴅ HELP !")
-     user = client.me
-     details = {
-       'id': user.id,
-       'is_bot': False,
-       'user_id': user_id,
-       'name': user.first_name,
-       'session': msg.text,
-       'username': user.username
-     }
-     await db.add_bot(details)
-     return True
-    
-@Client.on_message(filters.private & filters.command('reset'))
-async def forward_tag(bot, m):
-    default = await db.get_configs("01")
-    await db.update_configs(m.from_user.id, default)
-    await m.reply("Successfully Settings Reseted ✔️")
-
-@Client.on_message(filters.command('resetall') & filters.user(Config.OWNER_ID))
-async def resetall(bot, message):
-  users = await db.get_all_users()
-  sts = await message.reply("Processing")
-  TEXT = "Total: {}\nSuccess: {}\nFailed: {}\nExcept: {}"
-  total = success = failed = already = 0
-  ERRORS = []
-  async for user in users:
-      user_id = user['id']
-      default = await get_configs(user_id)
-      default['db_uri'] = None
-      total += 1
-      if total %10 == 0:
-         await sts.edit(TEXT.format(total, success, failed, already))
-      try: 
-         await db.update_configs(user_id, default)
-         success += 1
-      except Exception as e:
-         ERRORS.append(e)
-         failed += 1
-  if ERRORS:
-     await message.reply(ERRORS[:100])
-  await sts.edit("Completed\n" + TEXT.format(total, success, failed, already))
-  
-async def get_configs(user_id):
-  configs = await db.get_configs(user_id)
-  return configs
-
-async def update_configs(user_id, key, value):
-  current = await db.get_configs(user_id)
-  if key in ['caption', 'duplicate', 'db_uri', 'forward_tag', 'protect', 'file_size', 'size_limit', 'extension', 'keywords', 'button']:
-     current[key] = value
-  else: 
-     current['filters'][key] = value
-  await db.update_configs(user_id, current)
-    
 def parse_buttons(text, markup=True):
+    """Parses button markdown into a Pyrogram InlineKeyboardMarkup."""
     buttons = []
+    if not text:
+        return None
     for match in BTN_URL_REGEX.finditer(text):
         n_escapes = 0
         to_check = match.start(1) - 1
@@ -159,3 +50,141 @@ def parse_buttons(text, markup=True):
     if markup and buttons:
        buttons = InlineKeyboardMarkup(buttons)
     return buttons if buttons else None
+
+async def start_clone_bot(FwdBot, data=None):
+   """Starts the client."""
+   await FwdBot.start()
+   return FwdBot
+
+class CLIENT: 
+  def __init__(self):
+     self.api_id = Config.API_ID
+     self.api_hash = Config.API_HASH
+    
+  def client(self, data, user=None):
+     """Creates a Pyrogram client instance."""
+     client_name = str(uuid4())
+     if user is None and isinstance(data, dict) and not data.get('is_bot'):
+        return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, session_string=data.get('session'), in_memory=True)
+     elif user is True:
+        return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, session_string=data, in_memory=True)
+     else:
+        token = data.get('token') if isinstance(data, dict) else data
+        return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, bot_token=token, in_memory=True)
+  
+  async def add_bot(self, bot, query: Union[Message, CallbackQuery]):
+     """Handles the conversation flow for adding a new bot."""
+     user_id = query.from_user.id
+     try:
+        msg = await bot.ask(chat_id=user_id, text=BOT_TOKEN_TEXT, timeout=300)
+        
+        if msg.text and msg.text.lower() == '/cancel':
+           return await msg.reply('Process cancelled.')
+
+        bot_token_match = re.search(r'(\d{8,10}:[a-zA-Z0-9_-]{35})', msg.text)
+        bot_token = bot_token_match.group(1) if bot_token_match else None
+
+        if not bot_token:
+          return await msg.reply_text("No valid bot token found.")
+
+        try:
+          async with self.client(bot_token) as _client:
+             _bot = await _client.get_me()
+        except Exception as e:
+          return await msg.reply_text(f"<b>Bot Error:</b> `{e}`\n\nPlease check the token.")
+        
+        if await db.is_bot_exist(user_id, _bot.id):
+            return await msg.reply_text("This bot has already been added.")
+
+        details = {
+          'id': _bot.id,
+          'is_bot': True,
+          'user_id': user_id,
+          'name': _bot.first_name,
+          'token': bot_token,
+          'username': _bot.username 
+        }
+        await db.add_bot(details)
+        return True
+     except asyncio.TimeoutError:
+        await bot.send_message(user_id, "Process timed out.")
+        return False
+    
+  async def add_session(self, bot, query: Union[Message, CallbackQuery]):
+     """Handles the conversation flow for adding a new userbot session."""
+     user_id = query.from_user.id
+     try:
+        msg = await bot.ask(chat_id=user_id, text=SESSION_STRING_TEXT, timeout=300)
+
+        if msg.text and msg.text.lower() == '/cancel':
+           return await msg.reply('Process cancelled.')
+        elif not msg.text or len(msg.text) < SESSION_STRING_SIZE:
+           return await msg.reply('Not a valid session string.')
+
+        try:
+          async with self.client(msg.text, True) as client:
+             user = await client.get_me()
+        except Exception as e:
+          return await msg.reply_text(f"<b>Userbot Error:</b> `{e}`\n\nPlease check the session string.")
+        
+        if await db.is_bot_exist(user_id, user.id):
+            return await msg.reply_text("This userbot has already been added.")
+
+        details = {
+          'id': user.id,
+          'is_bot': False,
+          'user_id': user_id,
+          'name': user.first_name,
+          'session': msg.text,
+          'username': user.username
+        }
+        await db.add_bot(details)
+        return True
+     except asyncio.TimeoutError:
+        await bot.send_message(user_id, "Process timed out.")
+        return False
+
+@Client.on_message(filters.private & filters.command('reset'))
+async def reset_user_settings(bot, m):
+    """Resets a user's settings to default."""
+    default = await db.get_configs("01") # Using a non-user specific ID to get defaults
+    await db.update_configs(m.from_user.id, default)
+    await m.reply("Settings have been reset. ✓")
+
+@Client.on_message(filters.command('resetall') & filters.user(Config.OWNER_ID))
+async def reset_all_users_settings(bot, message):
+    """(Owner only) Resets specific settings for all users."""
+    users = await db.get_all_users()
+    sts = await message.reply("Processing...")
+    TEXT = "Total: {}\nSuccess: {}\nFailed: {}"
+    total = success = failed = 0
+    ERRORS = []
+    async for user in users:
+        user_id = user['id']
+        default = await get_configs(user_id)
+        default['db_uri'] = None # Example: resetting db_uri
+        total += 1
+        if total % 10 == 0:
+           await sts.edit(TEXT.format(total, success, failed))
+        try: 
+           await db.update_configs(user_id, default)
+           success += 1
+        except Exception as e:
+           ERRORS.append(e)
+           failed += 1
+    if ERRORS:
+       await message.reply(ERRORS[:100])
+    await sts.edit("Completed\n" + TEXT.format(total, success, failed))
+  
+async def get_configs(user_id):
+    """Retrieves user configurations from the database."""
+    return await db.get_configs(user_id)
+
+async def update_configs(user_id, key, value):
+    """Updates a specific configuration key for a user."""
+    current = await db.get_configs(user_id)
+    if key in ['caption', 'duplicate', 'db_uri', 'forward_tag', 'protect', 'file_size', 'size_limit', 'extension', 'keywords', 'button', 'forward_delay']:
+       current[key] = value
+    elif key in current.get('filters', {}):
+       current['filters'][key] = value
+    await db.update_configs(user_id, current)
