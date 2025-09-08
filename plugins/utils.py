@@ -30,8 +30,9 @@ def get_readable_time(seconds: int) -> str:
     if minutes != 0:
         result += f"{minutes}m"
     seconds = int(seconds)
-    result += f"{seconds}s"
-    return result
+    if seconds != 0:
+        result += f"{seconds}s"
+    return result.strip()
 
 class STS:
     def __init__(self, id):
@@ -107,7 +108,7 @@ async def start_range_selection(bot, message, from_chat_id, from_title, to_chat_
     await update_range_message(bot, session_id)
 
 async def update_range_message(bot, session_id, message=None):
-    """Edits or sends the range selection message."""
+    """Edits or sends the range selection message as a text message."""
     session = temp.RANGE_SESSIONS.get(session_id)
     if not session: return
 
@@ -134,10 +135,15 @@ async def update_range_message(bot, session_id, message=None):
     try:
         # If a message object is provided, edit it. Otherwise, send a new one.
         if message:
-            photo_message = await message.edit_caption(caption=text, reply_markup=reply_markup)
+            new_message = await message.edit_text(text=text, reply_markup=reply_markup)
         else:
-            photo_message = await bot.send_photo(chat_id=session['chat_id'], photo=random.choice(SYD),
-                                             caption=text, reply_markup=reply_markup, quote=True)
-        session['message_id'] = photo_message.id
+            new_message = await bot.send_message(chat_id=session['chat_id'], text=text,
+                                             reply_markup=reply_markup, quote=True)
+        session['message_id'] = new_message.id
     except Exception as e:
         logger.error(f"Error sending/editing range message: {e}", exc_info=True)
+        try:
+            # Inform the user if something goes wrong
+            await bot.send_message(session['chat_id'], "An error occurred while displaying the menu. Please try again.")
+        except Exception as ie:
+            logger.error(f"Failed to send error message to user: {ie}")
