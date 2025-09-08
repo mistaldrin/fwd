@@ -19,7 +19,7 @@ def parse_message_input(message):
         return None, None, "Invalid input. A message link or forwarded message is required."
 
     if message.text and not message.forward_date:
-        regex = re.compile(r"(https://)?(t\.me/|telegram\.me/|telegram\.dog/)(c/)?(\d+|[a-zA-Z_0-9]+)/(\d+)$")
+        regex = re.compile(r"(https://)?(t\.me/|telegram\.me/|telegram\.dog/)(c/)?(\d+|[a-zA-Z_0_9]+)/(\d+)$")
         match = regex.match(message.text.replace("?single", ""))
         if not match:
             return None, None, 'Invalid Link.'
@@ -92,7 +92,7 @@ async def cb_select_target(bot, query):
 
 
 # --- NEW High-Priority Stateful Message Handler ---
-@Client.on_message(filters.private & ~filters.command() & ~filters.edited, group=-1)
+@Client.on_message(filters.private & ~filters.edited, group=-1)
 async def stateful_message_handler(bot: Client, message: Message):
     """
     This handler checks for user states and processes messages accordingly.
@@ -105,11 +105,26 @@ async def stateful_message_handler(bot: Client, message: Message):
     if not state_info:
         return
 
+    # If the user sends a command while in a state, handle it gracefully
+    if message.text and message.text.startswith("/"):
+        # Allow /cancel to work universally
+        if message.text.lower() == "/cancel":
+            prompt_id = state_info.get("prompt_message_id")
+            if prompt_id:
+                try:
+                    await bot.delete_messages(user_id, prompt_id)
+                except Exception:
+                    pass
+            temp.USER_STATES.pop(user_id, None)
+            await message.reply(Translation.CANCEL)
+        else:
+            await message.reply("You are in the middle of a process. Please provide the requested information or use /cancel to abort.")
+        return # Stop further processing in this handler
+
     current_state = state_info.get("state")
 
     # --- State: Awaiting Source for /forward ---
     if current_state == "awaiting_source":
-        await message.delete() # delete the user's reply
         try:
             await bot.delete_messages(user_id, state_info["prompt_message_id"])
         except Exception:
@@ -121,7 +136,7 @@ async def stateful_message_handler(bot: Client, message: Message):
         temp.USER_STATES.pop(user_id, None)
         
         if error:
-            await bot.send_message(user_id, error)
+            await message.reply(error)
             return
 
         start_id = 1
@@ -136,14 +151,13 @@ async def stateful_message_handler(bot: Client, message: Message):
 
     # --- State: Awaiting Manual Target for /unequify ---
     elif current_state == "awaiting_unequify_manual_target":
-        await message.delete()
         target = message.text
         userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
         
         temp.USER_STATES.pop(user_id, None)
 
         if not userbot_id:
-            await bot.send_message(user_id, "Userbot selection lost. Please start over.")
+            await message.reply("Userbot selection lost. Please start over.")
             return
 
         from plugins.unequify import process_unequify_target
@@ -151,7 +165,6 @@ async def stateful_message_handler(bot: Client, message: Message):
 
     # --- State: Awaiting Chat Selection for /unequify ---
     elif current_state == "awaiting_unequify_chat_selection":
-        await message.delete()
         try:
             await bot.delete_messages(user_id, state_info["prompt_message"]["id"])
         except Exception:
@@ -163,12 +176,12 @@ async def stateful_message_handler(bot: Client, message: Message):
         temp.USER_STATES.pop(user_id, None)
 
         if not selected_chat:
-            await bot.send_message(user_id, "Invalid selection. Please start over.")
+            await message.reply("Invalid selection. Please start over.")
             return
 
         userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
         if not userbot_id:
-            await bot.send_message(user_id, "Userbot selection lost. Please start over.")
+            await message.reply("Userbot selection lost. Please start over.")
             return
         
         from plugins.unequify import process_unequify_target
