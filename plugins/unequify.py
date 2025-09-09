@@ -30,6 +30,7 @@ def create_selection_keyboard(selection_state: str, session_id: str) -> InlineKe
 
     for i, label in enumerate(OPTION_LABELS):
         text = f"✓ {label}" if state_list[i] == '1' else label
+        # The callback data now includes the current state for easy toggling
         callback_data = f"uneq_toggle_{selection_state}_{i}_{session_id}"
         buttons.append([InlineKeyboardButton(text, callback_data=callback_data)])
 
@@ -39,15 +40,33 @@ def create_selection_keyboard(selection_state: str, session_id: str) -> InlineKe
     ])
     return InlineKeyboardMarkup(buttons)
 
-async def prompt_type_selection(bot, query, session_id):
+async def prompt_type_selection(bot, query_or_message, session_id):
     """Sends the message with the type selection keyboard."""
+    user_id = query_or_message.from_user.id
     keyboard = create_selection_keyboard(DEFAULT_STATE, session_id)
+    
+    # If it's a callback query, we should edit the existing message.
+    if isinstance(query_or_message, CallbackQuery):
+        try:
+            await query_or_message.message.edit_caption(
+                caption="<b>Select Message Types</b>\n\nSelect the types of messages to find duplicates of.",
+                reply_markup=keyboard
+            )
+            await query_or_message.answer()
+            return
+        except (MessageNotModified, AttributeError): # Fallback if edit fails or it's not a photo
+            pass
+
+    # For a new message or fallback
     await bot.send_photo(
-        chat_id=query.from_user.id,
+        chat_id=user_id,
         photo=random.choice(SYD),
         caption="<b>Select Message Types</b>\n\nSelect the types of messages to find duplicates of.",
         reply_markup=keyboard
     )
+    if isinstance(query_or_message, CallbackQuery):
+        await query_or_message.answer()
+
 
 @Client.on_message(filters.command("unequify") & filters.private)
 async def unequify_start(bot: Client, message: Message):
@@ -131,9 +150,23 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
     user_id = query.from_user.id
     data = query.data.split("_", 1)[1]
     
-    if query.message and query.data.startswith("toggle_"):
-        pass # Don't delete for toggle
-    elif query.message:
+    # --- BUG FIX: Handle toggle separately to prevent message deletion ---
+    if data.startswith("toggle_"):
+        try:
+            _, current_state, index_str, session_id = data.split("_", 3)
+            index = int(index_str)
+            state_list = list(current_state)
+            state_list[index] = '1' if state_list[index] == '0' else '0'
+            new_state = "".join(state_list)
+            
+            await query.message.edit_reply_markup(create_selection_keyboard(new_state, session_id))
+            await query.answer() # Acknowledge the press
+        except Exception as e:
+            logger.error(f"Error toggling unequify state: {e}")
+        return # Stop further processing for this callback
+
+    # For other actions, delete the menu message
+    if query.message:
         await query.message.delete()
 
     if data == "manual":
@@ -169,19 +202,10 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
         except Exception as e:
             await status_msg.edit(f"An error occurred: `{e}`")
 
-    elif data.startswith("toggle_"):
-        _, current_state, index_str, session_id = data.split("_", 2)
-        index = int(index_str)
-        state_list = list(current_state)
-        state_list[index] = '1' if state_list[index] == '0' else '0'
-        new_state = "".join(state_list)
-        if query.message:
-            await query.message.edit_reply_markup(create_selection_keyboard(new_state, session_id))
-        await query.answer()
-
     elif data.startswith("startscan_"):
         _, selection_state, session_id = data.split("_", 2)
         await start_deduplication(bot, query, selection_state, session_id)
+
 
 @Client.on_callback_query(filters.regex(r'^uneq_status_'))
 async def get_uneq_status(bot, query):
@@ -206,10 +230,14 @@ async def get_uneq_status(bot, query):
     percentage = "{:.2f}".format(scanned * 100 / total) if total > 0 else "0.00"
 
     status_text = Translation.STATUS_ALERT.format(
-        fetched=scanned, total=total,
-        forwarded=deleted, # Using forwarded field for deleted count
-        deleted=deleted,
-        eta=eta, percentage=percentage
+        status="scanning",
+        fetched=scanned, 
+        total=total,
+        forwarded=0, # N/A for unequify
+        remaining=(total - scanned),
+        skipped=deleted,
+        percentage=percentage,
+        eta=eta
     )
     await query.answer(status_text, show_alert=True)
 
@@ -280,10 +308,16 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
                         seen_identifiers.add(identifier)
 
                 if len(duplicates_to_delete) >= 100:
-                    await userbot.delete_messages(chat_id=target_channel, message_ids=duplicates_to_delete)
-                    total_deleted += len(duplicates_to_delete)
-                    duplicates_to_delete.clear()
-                    await asyncio.sleep(5)
+                    try:
+                        await userbot.delete_messages(chat_id=target_channel, message_ids=duplicates_to_delete)
+                        total_deleted += len(duplicates_to_delete)
+                    except FloodWait as e:
+                        await asyncio.sleep(e.value)
+                        await userbot.delete_messages(chat_id=target_channel, message_ids=duplicates_to_delete)
+                        total_deleted += len(duplicates_to_delete)
+                    finally:
+                        duplicates_to_delete.clear()
+                        await asyncio.sleep(5)
 
                 current_time = time.time()
                 if current_time - last_edit_time > 15:
@@ -291,9 +325,14 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
                     last_edit_time = current_time
 
             if duplicates_to_delete and not temp.CANCEL.get(task_id):
-                await userbot.delete_messages(chat_id=target_channel, message_ids=duplicates_to_delete)
-                total_deleted += len(duplicates_to_delete)
-            
+                try:
+                    await userbot.delete_messages(chat_id=target_channel, message_ids=duplicates_to_delete)
+                    total_deleted += len(duplicates_to_delete)
+                except FloodWait as e:
+                    await asyncio.sleep(e.value)
+                    await userbot.delete_messages(chat_id=target_channel, message_ids=duplicates_to_delete)
+                    total_deleted += len(duplicates_to_delete)
+
             final_status = "cancelled" if temp.CANCEL.get(task_id) else "completed"
             await edit_unequify_progress(status_message, total_scanned, total_deleted, total_in_range, start_time, task_id, final_status)
 
