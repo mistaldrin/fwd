@@ -1,3 +1,4 @@
+# mistaldrin/fwd/fwd-dawn-improve-v2/plugins/regix.py
 import re
 import asyncio
 import logging
@@ -38,7 +39,6 @@ async def message_generator(client, chat_id, start_id, end_id, is_bot, order_asc
                     if message: yield message
             except Exception as e:
                 logger.error(f"Error fetching message chunk for bot: {e}")
-                # Continue to the next chunk
                 continue
     else:
         try:
@@ -58,7 +58,7 @@ async def progress_updater(status_message, sts, all_tasks):
         try:
             await edit_progress(status_message, sts, sts.get('status'))
         except MessageNotModified:
-            pass # Ignore if the message is the same
+            pass
         except Exception as e:
             logger.warning(f"Progress updater error: {e}")
         await asyncio.sleep(10)
@@ -72,12 +72,12 @@ async def process_message_concurrently(
     Processes a single message within a concurrent environment with robust error handling.
     """
     async with semaphore:
-        await flood_wait_event.wait() # Wait if a floodwait is active
+        await flood_wait_event.wait()
         if temp.CANCEL.get(frwd_id):
             return
 
+        sts.add('fetched')
         try:
-            sts.add('fetched')
             if not message or message.empty or message.service:
                 sts.add('deleted')
             else:
@@ -94,19 +94,16 @@ async def process_message_concurrently(
                     sts.add('total_files')
         except FloodWait as e:
             sts.set_status(f"floodwait ({e.value}s)")
-            flood_wait_event.clear() # PAUSE all other tasks
+            flood_wait_event.clear()
             await asyncio.sleep(e.value + 2)
-            flood_wait_event.set() # RESUME all other tasks
+            flood_wait_event.set()
             sts.set_status("running")
-            # Re-add the task to be processed again without incrementing fetched count
+            # Re-queue the task by calling the worker again
             await process_message_concurrently(client, message, sts, caption, forward_tag, protect, button, semaphore, frwd_id, delay, flood_wait_event)
-            sts.add('fetched', -1) # Decrement fetched since it will be re-incremented
-            return # Exit current attempt
-        except (MediaEmpty, RPCError) as e:
-            logger.warning(f"Skipping message {message.id} due to RPC/Media Error: {e}")
-            sts.add('failed')
+            sts.add('fetched', -1) # Decrement fetched as it will be re-incremented
+            return
         except Exception as e:
-            logger.error(f"FATAL: Failed to process message {message.id}: {e}", exc_info=True)
+            logger.error(f"Failed to process message {message.id}: {e}", exc_info=False)
             sts.add('failed')
         
         await asyncio.sleep(delay)
@@ -154,7 +151,7 @@ async def pub_(bot, cb):
 
     updater_task = None
     tasks = []
-    final_status = "error" # Default to error unless completed successfully
+    final_status = "error"
     try:
         await edit_progress(m, sts, "running")
         
@@ -176,8 +173,8 @@ async def pub_(bot, cb):
             await asyncio.gather(*tasks)
 
         if forward_tag and sts.get_batch():
-            for i in range(0, len(sts.get_batch()), 100):
-                await forward(client, sts.get_batch()[i:i+100], m, sts, protect, flood_wait_event)
+            for i_chunk in range(0, len(sts.get_batch()), 100):
+                await forward(client, sts.get_batch()[i_chunk:i_chunk+100], m, sts, protect, flood_wait_event)
 
         final_status = "cancelled" if temp.CANCEL.get(frwd_id) else "completed"
         
@@ -238,7 +235,6 @@ async def msg_edit(msg, text, button=None, wait=None):
             await asyncio.sleep(e.value)
             return await msg_edit(msg, text, button, wait)
     except Exception as e:
-        # logger.error(f"Error editing message: {e}")
         return msg
 
 async def edit_progress(msg, sts, status):
@@ -265,7 +261,7 @@ async def edit_progress(msg, sts, status):
         if status == "cancelled":
             text = f"❌ **Task Cancelled!**\n\n**Processed:** `{i.fetched}`\n**Forwarded:** `{i.total_files}`\n**Failed:** `{i.failed}`"
         elif status == "error":
-            text = f"⚠️ **Error!**\n\nAn unexpected error occurred. Please check the logs.\n**Processed:** `{i.fetched}`"
+            text = f"⚠️ **Error!**\n\nAn unexpected error occurred. Check logs.\n**Processed:** `{i.fetched}`"
         button = InlineKeyboardMarkup([[InlineKeyboardButton("Done!", callback_data="close_btn")]])
 
     await msg_edit(msg, text, button)
@@ -306,4 +302,3 @@ def get_size(size):
 
 def retry_btn(id):
     return InlineKeyboardMarkup([[InlineKeyboardButton('Retry', f"start_public_{id}")]])
-
