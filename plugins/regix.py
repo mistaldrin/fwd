@@ -79,9 +79,9 @@ async def pub_(bot, cb):
         
         # Determine message iteration logic based on bot type
         if _bot.get('is_bot', False):
-            message_ids = list(range(start_point, end_point + 1))
-            for i in range(0, len(message_ids), 200):
-                chunk = message_ids[i:i+200]
+            message_ids = list(range(min(start_point, end_point), max(start_point, end_point) + 1))
+            for chunk_start in range(0, len(message_ids), 200):
+                chunk = message_ids[chunk_start:chunk_start+200]
                 messages = await client.get_messages(i.FROM, chunk)
                 messages_to_process.extend(messages)
         else: # Userbot
