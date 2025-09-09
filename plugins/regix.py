@@ -66,7 +66,6 @@ async def pub_(bot, cb):
     temp.lock[user_id] = True
     temp.forwardings += 1
     
-    # Respect the user-configured delay from /forwardelay
     sleep_duration = data_params.get('forward_delay', 1.0)
     last_edit_time = time.time()
     sts.add(time=True)
@@ -74,46 +73,44 @@ async def pub_(bot, cb):
     try:
         await edit_progress(m, sts, "running")
         
-        # Efficiently iterate through messages
-        message_iterator = client.iter_messages(i.FROM, limit=i.end_id, offset=i.start_id)
-        
         MSG_batch = []
         
-        async for message in message_iterator:
-            if temp.CANCEL.get(frwd_id):
-                await is_cancelled(bot, user_id, m, sts, frwd_id)
-                return
+        # Differentiate between userbot and bot for optimal fetching
+        if not _bot.get('is_bot'):
+            # USERBOT LOGIC: More efficient get_chat_history
+            async for message in client.get_chat_history(i.FROM):
+                # The history is fetched in reverse, so we check accordingly
+                if message.id < i.start_id: break
+                if message.id > i.end_id: continue
+                
+                if temp.CANCEL.get(frwd_id): break
+                await process_message(message, client, sts, forward_tag, MSG_batch, caption, button, protect, sleep_duration, m)
+        else:
+            # BOT LOGIC: Fetch in chunks to avoid flood waits
+            current_id = i.start_id
+            while current_id <= i.end_id:
+                if temp.CANCEL.get(frwd_id): break
+                
+                chunk_size = 100 
+                message_ids = list(range(current_id, min(current_id + chunk_size, i.end_id + 1)))
+                if not message_ids: break
 
-            sts.add('fetched')
-            
-            if not message or message.empty or message.service:
-               sts.add('deleted')
-               continue
+                try:
+                    messages = await client.get_messages(i.FROM, message_ids)
+                    for message in messages:
+                        await process_message(message, client, sts, forward_tag, MSG_batch, caption, button, protect, sleep_duration, m)
+                except Exception as e:
+                    logger.error(f"Could not get messages chunk: {e}")
+                
+                current_id += chunk_size
+                await asyncio.sleep(1) # Small delay between fetching chunks
 
-            if forward_tag:
-               MSG_batch.append(message.id)
-               if len(MSG_batch) >= 100:
-                  await forward(client, MSG_batch, m, sts, protect)
-                  sts.add('total_files', len(MSG_batch))
-                  await asyncio.sleep(10) # API cooldown for batch forwards
-                  MSG_batch = []
-            else:
-               new_caption = custom_caption(message, caption)
-               details = {"msg_id": message.id, "media": media(message), "caption": new_caption, 'button': button, "protect": protect, "text": message.text.html if message.text else None}
-               await copy(client, details, m, sts)
-               sts.add('total_files')
-               await asyncio.sleep(sleep_duration)
-            
-            current_time = time.time()
-            if current_time - last_edit_time > 15: # Update progress every 15s
-                await edit_progress(m, sts, "running")
-                last_edit_time = current_time
-
-        if forward_tag and MSG_batch: # Forward any remaining messages in the batch
+        if forward_tag and MSG_batch: # Forward any remaining messages
             await forward(client, MSG_batch, m, sts, protect)
             sts.add('total_files', len(MSG_batch))
 
-        await edit_progress(m, sts, "completed") 
+        final_status = "cancelled" if temp.CANCEL.get(frwd_id) else "completed"
+        await edit_progress(m, sts, final_status)
     
     except Exception as e:
         logger.error(f"Forwarding error: {e}", exc_info=True)
@@ -121,6 +118,35 @@ async def pub_(bot, cb):
     
     finally:
         await stop(client, user_id, frwd_id, m)
+
+
+async def process_message(message, client, sts, forward_tag, MSG_batch, caption, button, protect, sleep_duration, m):
+    """Helper function to process a single message inside the main loop."""
+    sts.add('fetched')
+    
+    if not message or message.empty or message.service:
+       sts.add('deleted')
+       return
+
+    if forward_tag:
+       MSG_batch.append(message.id)
+       if len(MSG_batch) >= 100:
+          await forward(client, MSG_batch, m, sts, protect)
+          sts.add('total_files', len(MSG_batch))
+          MSG_batch.clear()
+          await asyncio.sleep(10) # API cooldown for batch forwards
+    else:
+       new_caption = custom_caption(message, caption)
+       details = {"msg_id": message.id, "media": media(message), "caption": new_caption, 'button': button, "protect": protect, "text": message.text.html if message.text else None}
+       await copy(client, details, m, sts)
+       sts.add('total_files')
+       await asyncio.sleep(sleep_duration)
+    
+    # Throttled progress update
+    current_time = time.time()
+    if current_time - getattr(sts, 'last_edit_time', 0) > 15:
+        await edit_progress(m, sts, "running")
+        sts.last_edit_time = current_time
 
 # --- Callbacks ---
 @Client.on_callback_query(filters.regex(r'^frwd_status_'))
