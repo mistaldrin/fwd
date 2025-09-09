@@ -40,7 +40,7 @@ def parse_buttons(text, markup=True):
             to_check -= 1
 
         if n_escapes % 2 == 0:
-            if bool(match.group(4)) and butbuttonstons:
+            if bool(match.group(4)) and buttons:
                 buttons[-1].append(InlineKeyboardButton(
                     text=match.group(2),
                     url=match.group(3).replace(" ", "")))
@@ -66,11 +66,12 @@ async def start_clone_bot(FwdBot, bot_data):
       ) -> Optional[AsyncGenerator["types.Message", None]]:
         current = offset
         while True:
-            new_diff = min(100, limit - current)
+            new_diff = min(200, limit - current)
             if new_diff <= 0:
                 return
             
-            message_ids = list(range(current, current + new_diff))
+            # More robust way to generate message IDs for get_messages
+            message_ids = [_ for _ in range(current, current + new_diff)]
             messages = await self.get_messages(chat_id, message_ids)
 
             for message in messages:
@@ -180,7 +181,7 @@ async def reset_user_settings(bot, m):
     await db.update_configs(m.from_user.id, default)
     await m.reply("Settings have been reset. ✓")
 
-@Client.on_message(filters.command('resetall') & filters.user(Config.OWNER_IＤ))
+@Client.on_message(filters.command('resetall') & filters.user(Config.OWNER_ID))
 async def reset_all_users_settings(bot, message):
     """(Owner only) Resets specific settings for all users."""
     users = await db.get_all_users()
