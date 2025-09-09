@@ -11,7 +11,7 @@ from config import Config, temp
 from translation import Translation
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
-from pyrogram.errors import FloodWait, MessageNotModified, RPCError
+from pyrogram.errors import FloodWait, MessageNotModified, RPCError, MediaEmpty
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message
 
 CLIENT = CLIENT()
@@ -21,35 +21,32 @@ logger.setLevel(logging.INFO)
 CONCURRENCY_LIMIT = 5 # Number of concurrent tasks
 
 # --- Asynchronous Message Generator ---
-async def message_generator(client, chat_id, start_id, end_id, is_bot):
+async def message_generator(client, chat_id, start_id, end_id, is_bot, order_asc):
     """
-    Yields messages from a specific range, handling both bot and userbot clients.
+    Yields messages from a specific range, handling both bot and userbot clients and order.
     """
-    current_id = min(start_id, end_id)
-    target_id = max(start_id, end_id)
-
     if is_bot:
         # Bots can fetch specific message ID ranges in chunks
-        while current_id <= target_id:
-            chunk_size = min(100, target_id - current_id + 1)
-            message_ids = list(range(current_id, current_id + chunk_size))
-            if not message_ids:
+        message_ids = list(range(start_id, end_id + 1))
+        if not order_asc:
+            message_ids.reverse()
+        
+        for i in range(0, len(message_ids), 100):
+            chunk = message_ids[i:i+100]
+            if not chunk:
                 break
             
-            messages = await client.get_messages(chat_id, message_ids)
+            messages = await client.get_messages(chat_id, chunk)
             for message in messages:
-                if message: # Filter out empty messages from get_messages
+                if message:
                     yield message
-            
-            current_id += chunk_size
     else:
-        # Userbots should iterate history to be more efficient and avoid bans
+        # Userbots iterate history. Pyrogram handles ordering internally.
         async for message in client.get_chat_history(chat_id):
-            if message.id > target_id:
-                continue
-            if message.id < current_id:
-                break
+            if message.id > max(start_id, end_id): continue
+            if message.id < min(start_id, end_id): break
             yield message
+
 
 # --- Concurrent Worker Function ---
 async def process_message_concurrently(
@@ -69,17 +66,35 @@ async def process_message_concurrently(
         if not message or message.empty or message.service:
             sts.add('deleted')
         else:
-            if forward_tag:
-                sts.add_to_batch(message.id)
-            else:
-                new_caption = custom_caption(message, caption)
-                details = {
-                    "msg_id": message.id, "media": media(message), "caption": new_caption,
-                    'button': button, "protect": protect,
-                    "text": message.text.html if message.text else None
-                }
-                await copy(client, details, status_message, sts)
-                sts.add('total_files')
+            try:
+                if forward_tag:
+                    # Batch forwarding is handled outside this worker
+                    sts.add_to_batch(message.id)
+                    sts.add('total_files') # Assume success for batching
+                else:
+                    new_caption = custom_caption(message, caption)
+                    # Direct copy_message call for robustness
+                    await client.copy_message(
+                        chat_id=sts.get('TO'),
+                        from_chat_id=sts.get('FROM'),
+                        message_id=message.id,
+                        caption=new_caption,
+                        reply_markup=button,
+                        protect_content=protect
+                    )
+                    sts.add('total_files')
+            except MediaEmpty:
+                sts.add('deleted') # Treat messages with no forwardable content as skipped
+            except FloodWait as e:
+                async with progress_lock:
+                    await edit_progress(status_message, sts, f"floodwait ({e.value}s)")
+                await asyncio.sleep(e.value + 2)
+                # Retry after floodwait
+                await process_message_concurrently(client, message, sts, caption, forward_tag, protect, button, semaphore, frwd_id, progress_lock, status_message, delay)
+                return # Exit current attempt after requeueing
+            except Exception as e:
+                logger.warning(f"Failed to copy message {message.id} from {sts.get('FROM')}: {e}")
+                sts.add('deleted')
 
         # Locked progress update
         async with progress_lock:
@@ -128,10 +143,7 @@ async def pub_(bot, cb):
 
     if user_id not in temp.ACTIVE_TASKS:
         temp.ACTIVE_TASKS[user_id] = {}
-    temp.ACTIVE_TASKS[user_id][frwd_id] = {
-        "process": m,
-        "details": {"type": "Forwarding", "from": from_title, "to": to_title}
-    }
+    temp.ACTIVE_TASKS[user_id][frwd_id] = { "process": m, "details": {"type": "Forwarding", "from": from_title, "to": to_title} }
     temp.lock[user_id] = True
     temp.forwardings += 1
 
@@ -142,30 +154,23 @@ async def pub_(bot, cb):
         progress_lock = asyncio.Lock()
         tasks = []
 
-        # Use the message generator
         is_bot_client = _bot.get('is_bot', False)
-        message_gen = message_generator(client, i.FROM, i.start_id, i.end_id, is_bot_client)
+        # Assuming the range selection logic correctly sets start_id and end_id based on user's chronological choice
+        order_asc = i.start_id < i.end_id
+        message_gen = message_generator(client, i.FROM, min(i.start_id, i.end_id), max(i.start_id, i.end_id), is_bot_client, order_asc)
 
         async for message in message_gen:
-            if temp.CANCEL.get(frwd_id):
-                break
-            task = asyncio.create_task(
-                process_message_concurrently(
-                    client, message, sts, caption, forward_tag,
-                    protect, button, semaphore, frwd_id,
-                    progress_lock, m, delay
-                )
-            )
+            if temp.CANCEL.get(frwd_id): break
+            task = asyncio.create_task(process_message_concurrently(client, message, sts, caption, forward_tag, protect, button, semaphore, frwd_id, progress_lock, m, delay))
             tasks.append(task)
         
-        # Wait for all concurrent tasks to complete
         await asyncio.gather(*tasks)
 
-        # Forward any remaining messages in the batch
+        # Handle batched forwarding for forward_tag mode
         if forward_tag and sts.get_batch():
-            await forward(client, sts.get_batch(), m, sts, protect)
-            sts.add('total_files', len(sts.get_batch()))
-            sts.clear_batch()
+            for i in range(0, len(sts.get_batch()), 100):
+                chunk = sts.get_batch()[i:i+100]
+                await forward(client, chunk, m, sts, protect)
 
         final_status = "cancelled" if temp.CANCEL.get(frwd_id) else "completed"
         await edit_progress(m, sts, final_status)
@@ -182,60 +187,34 @@ async def pub_(bot, cb):
 async def get_frwd_status(bot, query):
     task_id = query.data.split("_", 2)[2]
     sts = STS(task_id)
-    if not sts.verify():
-        return await query.answer("This task has completed or been cancelled.", show_alert=True)
+    if not sts.verify(): return await query.answer("This task has completed or been cancelled.", show_alert=True)
 
     i = sts.get(full=True)
-    now = time.time()
-    diff = now - i.start
+    now, diff = time.time(), time.time() - i.start
     if diff == 0: diff = 1
 
     speed = i.fetched / diff
-    eta_seconds = (i.total - i.fetched) / speed if speed > 0 else 0
-    eta = sts.get_readable_time(int(eta_seconds))
-    percentage = "{:.2f}".format(i.fetched * 100 / i.total) if i.total > 0 else "0.00"
+    eta = sts.get_readable_time(int((i.total - i.fetched) / speed if speed > 0 else 0))
+    percentage = "{:.2f}".format(i.fetched * 100 / i.total if i.total > 0 else 0.00)
 
-    status_text = Translation.STATUS_ALERT.format(
-        status=i.status,
-        fetched=i.fetched, total=i.total,
-        forwarded=i.total_files,
-        remaining=(i.total - i.fetched),
-        skipped=i.deleted + i.filtered,
-        percentage=percentage, eta=eta
+    await query.answer(
+        Translation.STATUS_ALERT.format(
+            status=i.status, fetched=i.fetched, total=i.total, forwarded=i.total_files,
+            remaining=(i.total - i.fetched), skipped=i.deleted + i.filtered,
+            percentage=percentage, eta=eta
+        ),
+        show_alert=True
     )
-    await query.answer(status_text, show_alert=True)
 
 
 # --- Helper functions ---
-async def copy(bot, msg, m, sts):
-    try:
-        if msg.get("media"):
-            await bot.copy_message(
-                chat_id=sts.get('TO'), from_chat_id=sts.get('FROM'),
-                message_id=msg.get("msg_id"), caption=msg.get("caption"),
-                reply_markup=msg.get('button'), protect_content=msg.get("protect", False))
-        elif msg.get("text"):
-            await bot.send_message(
-                chat_id=sts.get('TO'), text=msg.get("text"),
-                reply_markup=msg.get('button'), protect_content=msg.get("protect", False))
-        else:
-            sts.add('deleted')
-    except FloodWait as e:
-        await edit_progress(m, sts, f"floodwait ({e.value}s)")
-        await asyncio.sleep(e.value + 2) # Add buffer
-        await copy(bot, msg, m, sts) # Retry
-    except Exception as e:
-        logger.warning(f"Failed to copy message {msg.get('msg_id')}: {e}")
-        sts.add('deleted')
-
 async def forward(bot, msg_ids, m, sts, protect):
     try:
-        await bot.forward_messages(
-            chat_id=sts.get('TO'), from_chat_id=sts.get('FROM'),
-            protect_content=protect, message_ids=msg_ids)
+        await bot.forward_messages(chat_id=sts.get('TO'), from_chat_id=sts.get('FROM'), protect_content=protect, message_ids=msg_ids)
     except FloodWait as e:
-        await edit_progress(m, sts, f"floodwait ({e.value}s)")
-        await asyncio.sleep(e.value + 2) # Add buffer
+        async with asyncio.Lock(): # Assuming progress_lock is not available here
+            await edit_progress(m, sts, f"floodwait ({e.value}s)")
+        await asyncio.sleep(e.value + 2)
         await forward(bot, msg_ids, m, sts, protect) # Retry
 
 async def msg_edit(msg, text, button=None, wait=None):
@@ -257,90 +236,61 @@ async def edit_progress(msg, sts, status):
 
     button = None
     if status not in ["cancelled", "completed"]:
-        now = time.time()
-        diff = now - i.start
+        now, diff = time.time(), time.time() - i.start
         if diff == 0: diff = 1
 
         speed = i.fetched / diff
-        eta_seconds = (i.total - i.fetched) / speed if speed > 0 else 0
-        eta = sts.get_readable_time(int(eta_seconds))
-        percentage = "{:.2f}".format(i.fetched * 100 / i.total) if i.total > 0 else "0.00"
-
-        progress_bar = "▰{0}▱{1}".format(
-            '▰' * math.floor(float(percentage) / 10),
-            '▱' * (10 - math.floor(float(percentage) / 10))
-        )
+        eta = sts.get_readable_time(int((i.total - i.fetched) / speed if speed > 0 else 0))
+        percentage = "{:.2f}".format(i.fetched * 100 / i.total if i.total > 0 else 0.00)
+        progress_bar = "▰{0}▱{1}".format('▰' * math.floor(float(percentage) / 10), '▱' * (10 - math.floor(float(percentage) / 10)))
 
         text = Translation.TEXT.format(
-            fetched=i.fetched, total=i.total, forwarded=i.total_files,
+            status=status, fetched=i.fetched, total=i.total, forwarded=i.total_files,
             skipped=i.deleted, duplicates=i.duplicate,
-            status=status, percentage=percentage, eta=eta, progress_bar=progress_bar
+            percentage=percentage, eta=eta, progress_bar=progress_bar
         )
-
-        button = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"📊 Status: {percentage}%", callback_data=f'frwd_status_{i.id}')],
-            [InlineKeyboardButton('❌ Cancel ❌', f'cancel_task_{i.id}')]
-        ])
+        button = InlineKeyboardMarkup([[InlineKeyboardButton(f"📊 Status: {percentage}%", callback_data=f'frwd_status_{i.id}')], [InlineKeyboardButton('❌ Cancel ❌', f'cancel_task_{i.id}')]])
     else:
-        final_text = f"✅ **Task Completed!**\n\n**Processed:** `{i.fetched}`\n**Forwarded:** `{i.total_files}`"
+        text = f"✅ **Task Completed!**\n\n**Processed:** `{i.fetched}`\n**Forwarded:** `{i.total_files}`"
         if status == "cancelled":
-            final_text = f"❌ **Task Cancelled!**\n\n**Processed:** `{i.fetched}`\n**Forwarded:** `{i.total_files}`"
-        text = final_text
+            text = f"❌ **Task Cancelled!**\n\n**Processed:** `{i.fetched}`\n**Forwarded:** `{i.total_files}`"
         button = InlineKeyboardMarkup([[InlineKeyboardButton("Done!", callback_data="close_btn")]])
 
     await msg_edit(msg, text, button)
 
 async def stop(client, user_id, task_id, message_obj):
-    try:
-        await client.stop()
+    try: await client.stop()
     except: pass
-
-    if temp.ACTIVE_TASKS.get(user_id, {}).get(task_id):
-        del temp.ACTIVE_TASKS[user_id][task_id]
-
+    if temp.ACTIVE_TASKS.get(user_id, {}).get(task_id): del temp.ACTIVE_TASKS[user_id][task_id]
     temp.CANCEL.pop(task_id, None)
     await db.rmve_frwd(user_id)
-    if temp.forwardings > 0:
-        temp.forwardings -= 1
+    if temp.forwardings > 0: temp.forwardings -= 1
     temp.lock.pop(user_id, None)
 
 def custom_caption(msg, caption):
     if not msg: return ""
-    if not msg.media and not caption:
-        return (msg.text or "").html if msg.text else ""
-    if not msg.media and caption:
-        return caption.format(filename="", size="", caption=(msg.text or "").html)
-
-    media = getattr(msg, msg.media.value, None) if msg.media else None
-    if not media:
-        return (msg.caption or "").html if msg.caption else ""
-
-    file_name = getattr(media, 'file_name', '')
-    file_size = get_size(getattr(media, 'file_size', 0))
     fcaption = (msg.caption or "").html if msg.caption else ""
+    if not caption: return fcaption
 
-    if caption:
-        return caption.format(filename=file_name, size=file_size, caption=fcaption)
-    return fcaption
+    file_name, file_size = "", "0 B"
+    if msg.media:
+        media = getattr(msg, msg.media.value, None)
+        if media:
+            file_name = getattr(media, 'file_name', '')
+            file_size = get_size(getattr(media, 'file_size', 0))
+    
+    return caption.format(filename=file_name, size=file_size, caption=fcaption)
 
 def get_size(size):
     try:
         if not size: return "0 B"
-        units = ["B", "KB", "MB", "GB", "TB"]
-        size = float(size)
+        units, size = ["B", "KB", "MB", "GB", "TB"], float(size)
         i = 0
         while size >= 1024.0 and i < len(units) - 1:
             i += 1
             size /= 1024.0
         return f"{size:.2f} {units[i]}"
     except: return "N/A"
-
-def media(msg):
-    if msg and msg.media and hasattr(msg, 'media') and hasattr(msg, 'media', 'value'):
-        media_obj = getattr(msg, msg.media.value, None)
-        if media_obj:
-            return getattr(media_obj, 'file_id', None)
-    return None
 
 def retry_btn(id):
     return InlineKeyboardMarkup([[InlineKeyboardButton('Retry', f"start_public_{id}")]])
