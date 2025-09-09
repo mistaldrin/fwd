@@ -18,97 +18,7 @@ CLIENT = CLIENT()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-CONCURRENCY_LIMIT = 5 # Number of concurrent tasks
-
-# --- Asynchronous Message Generator ---
-async def message_generator(client, chat_id, start_id, end_id, is_bot, order_asc):
-    """
-    Yields messages from a specific range, handling both bot and userbot clients and order.
-    """
-    if is_bot:
-        message_ids = list(range(start_id, end_id + 1))
-        if not order_asc: message_ids.reverse()
-        
-        for i in range(0, len(message_ids), 100):
-            chunk = message_ids[i:i+100]
-            if not chunk: break
-            
-            try:
-                messages = await client.get_messages(chat_id, chunk)
-                for message in messages:
-                    if message: yield message
-            except Exception as e:
-                logger.error(f"Error fetching message chunk for bot: {e}")
-                continue
-    else:
-        try:
-            async for message in client.get_chat_history(chat_id):
-                if message.id > max(start_id, end_id): continue
-                if message.id < min(start_id, end_id): break
-                yield message
-        except Exception as e:
-            logger.error(f"Error fetching chat history for userbot: {e}")
-
-# --- Dedicated Progress Updater ---
-async def progress_updater(status_message, sts, all_tasks):
-    """
-    Updates the progress message at regular intervals until all tasks are complete.
-    """
-    while not all(t.done() for t in all_tasks):
-        try:
-            await edit_progress(status_message, sts, sts.get('status'))
-        except MessageNotModified:
-            pass
-        except Exception as e:
-            logger.warning(f"Progress updater error: {e}")
-        await asyncio.sleep(10)
-
-# --- Resilient Concurrent Worker Function ---
-async def process_message_concurrently(
-    client, message, sts, caption, forward_tag,
-    protect, button, semaphore, frwd_id, delay, flood_wait_event
-):
-    """
-    Processes a single message within a concurrent environment with robust error handling.
-    """
-    async with semaphore:
-        await flood_wait_event.wait()
-        if temp.CANCEL.get(frwd_id):
-            return
-
-        sts.add('fetched')
-        try:
-            if not message or message.empty or message.service:
-                sts.add('deleted')
-            else:
-                if forward_tag:
-                    sts.add_to_batch(message.id)
-                    sts.add('total_files')
-                else:
-                    new_caption = custom_caption(message, caption)
-                    await client.copy_message(
-                        chat_id=sts.get('TO'), from_chat_id=sts.get('FROM'),
-                        message_id=message.id, caption=new_caption,
-                        reply_markup=button, protect_content=protect
-                    )
-                    sts.add('total_files')
-        except FloodWait as e:
-            sts.set_status(f"floodwait ({e.value}s)")
-            flood_wait_event.clear()
-            await asyncio.sleep(e.value + 2)
-            flood_wait_event.set()
-            sts.set_status("running")
-            # Re-queue the task by calling the worker again
-            await process_message_concurrently(client, message, sts, caption, forward_tag, protect, button, semaphore, frwd_id, delay, flood_wait_event)
-            sts.add('fetched', -1) # Decrement fetched as it will be re-incremented
-            return
-        except Exception as e:
-            logger.error(f"Failed to process message {message.id}: {e}", exc_info=False)
-            sts.add('failed')
-        
-        await asyncio.sleep(delay)
-
-# --- Main Task Starter ---
+# --- Main Task Starter (Simplified, mr-syd Architecture) ---
 @Client.on_callback_query(filters.regex(r'^start_public'))
 async def pub_(bot, cb):
     user_id = cb.from_user.id
@@ -148,41 +58,81 @@ async def pub_(bot, cb):
     temp.ACTIVE_TASKS[user_id][frwd_id] = { "process": m, "details": {"type": "Forwarding", "from": from_title, "to": to_title} }
     temp.lock[user_id] = True
     temp.forwardings += 1
-
-    updater_task = None
-    tasks = []
+    
     final_status = "error"
     try:
         await edit_progress(m, sts, "running")
         
-        semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
-        flood_wait_event = asyncio.Event()
-        flood_wait_event.set()
-
         is_bot_client = _bot.get('is_bot', False)
         order_asc = i.start_id < i.end_id
-        message_gen = message_generator(client, i.FROM, min(i.start_id, i.end_id), max(i.start_id, i.end_id), is_bot_client, order_asc)
-
-        async for message in message_gen:
-            if temp.CANCEL.get(frwd_id): break
-            task = asyncio.create_task(process_message_concurrently(client, message, sts, caption, forward_tag, protect, button, semaphore, frwd_id, delay, flood_wait_event))
-            tasks.append(task)
         
-        if tasks:
-            updater_task = asyncio.create_task(progress_updater(m, sts, tasks))
-            await asyncio.gather(*tasks)
+        # This is the new, robust message iterator from test.py
+        message_iterator = client.iter_messages(
+            chat_id=i.FROM,
+            reverse=order_asc # Pyrogram's reverse=True means oldest to newest
+        )
 
-        if forward_tag and sts.get_batch():
-            for i_chunk in range(0, len(sts.get_batch()), 100):
-                await forward(client, sts.get_batch()[i_chunk:i_chunk+100], m, sts, protect, flood_wait_event)
+        async for message in message_iterator:
+            if temp.CANCEL.get(frwd_id):
+                final_status = "cancelled"
+                break
+            
+            # Filter based on message ID range
+            if not (min(i.start_id, i.end_id) <= message.id <= max(i.start_id, i.end_id)):
+                continue
 
-        final_status = "cancelled" if temp.CANCEL.get(frwd_id) else "completed"
-        
+            sts.add('fetched')
+            
+            # Update progress message every 20 messages
+            if sts.get('fetched') % 20 == 0:
+                await edit_progress(m, sts, "running")
+
+            if not message or message.empty or message.service:
+                sts.add('deleted')
+                continue
+
+            # This is the core fault-tolerance loop
+            try:
+                if forward_tag:
+                    # This mode is less common and simpler
+                    await message.forward(chat_id=i.TO, protect_content=protect)
+                    sts.add('total_files')
+                else:
+                    new_caption = custom_caption(message, caption)
+                    await message.copy(
+                        chat_id=i.TO,
+                        caption=new_caption,
+                        reply_markup=button,
+                        protect_content=protect
+                    )
+                    sts.add('total_files')
+            except FloodWait as e:
+                sts.set_status(f"floodwait ({e.value}s)")
+                await edit_progress(m, sts, sts.get('status'))
+                await asyncio.sleep(e.value + 2)
+                sts.set_status("running")
+                # Retry the same message
+                try:
+                    if forward_tag:
+                        await message.forward(chat_id=i.TO, protect_content=protect)
+                    else:
+                        await message.copy(chat_id=i.TO, caption=new_caption, reply_markup=button, protect_content=protect)
+                    sts.add('total_files')
+                except Exception as e:
+                    logger.error(f"Retry failed for message {message.id}: {e}")
+                    sts.add('failed')
+            except Exception as e:
+                logger.error(f"Failed to process message {message.id}: {e}", exc_info=False)
+                sts.add('failed')
+
+            await asyncio.sleep(delay)
+
+        if not temp.CANCEL.get(frwd_id):
+            final_status = "completed"
+
     except Exception as e:
         logger.error(f"Main forwarding loop error: {e}", exc_info=True)
     finally:
-        if updater_task and not updater_task.done():
-            updater_task.cancel()
         await edit_progress(m, sts, final_status)
         await stop(client, user_id, frwd_id, m)
 
@@ -211,20 +161,7 @@ async def get_frwd_status(bot, query):
         show_alert=True
     )
 
-
 # --- Helper functions ---
-async def forward(bot, msg_ids, m, sts, protect, flood_wait_event):
-    try:
-        await flood_wait_event.wait()
-        await bot.forward_messages(chat_id=sts.get('TO'), from_chat_id=sts.get('FROM'), protect_content=protect, message_ids=msg_ids)
-    except FloodWait as e:
-        sts.set_status(f"floodwait ({e.value}s)")
-        flood_wait_event.clear()
-        await asyncio.sleep(e.value + 2)
-        flood_wait_event.set()
-        sts.set_status("running")
-        await forward(bot, msg_ids, m, sts, protect, flood_wait_event)
-
 async def msg_edit(msg, text, button=None, wait=None):
     try:
         return await msg.edit(text, reply_markup=button, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
@@ -277,8 +214,15 @@ async def stop(client, user_id, task_id, message_obj):
 
 def custom_caption(msg, caption):
     if not msg: return ""
-    fcaption = (msg.caption or "").html if msg.caption else ""
-    if not caption: return fcaption
+    
+    # Prioritize message text for text-only messages, otherwise use caption
+    fcaption_text = ""
+    if msg.text:
+        fcaption_text = msg.text.html
+    elif msg.caption:
+        fcaption_text = msg.caption.html
+    
+    if not caption: return fcaption_text
     
     file_name, file_size = "", "0 B"
     if msg.media:
@@ -287,7 +231,7 @@ def custom_caption(msg, caption):
             file_name = getattr(media, 'file_name', '')
             file_size = get_size(getattr(media, 'file_size', 0))
     
-    return caption.format(filename=file_name, size=file_size, caption=fcaption)
+    return caption.format(filename=file_name, size=file_size, caption=fcaption_text)
 
 def get_size(size):
     try:
