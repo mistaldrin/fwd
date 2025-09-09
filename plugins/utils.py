@@ -1,4 +1,4 @@
-#1
+# mistaldrin/fwd/fwd-dawn-improve-v2/plugins/utils.py
 import re
 import random
 import time as tm
@@ -48,7 +48,7 @@ class STS:
             "id": self.id,
             "FROM": From, 'TO': to, 'total_files': 0,
             'start_id': start_id, 'end_id': end_id,
-            'fetched': 0, 'filtered': 0, 'deleted': 0,
+            'fetched': 0, 'filtered': 0, 'deleted': 0, 'failed': 0, # Added failed counter
             'duplicate': 0, 'total': abs(end_id - start_id) + 1,
             'start': tm.time(), 'status': 'running', 'batch': []
         }
@@ -116,7 +116,7 @@ class STS:
             'filters': filters, 'keywords': configs['keywords'],
             'media_size': size, 'extensions': configs['extension'],
             'skip_duplicate': duplicate,
-            'forward_delay': configs.get('forward_delay', 0.5) # Re-added for custom delay
+            'forward_delay': configs.get('forward_delay', 0.5)
         }, configs['protect'], button
 
 async def start_range_selection(bot, message: Message, from_chat_id, from_title, to_chat_id, start_id, end_id, final_callback_prefix="fwd_final"):
