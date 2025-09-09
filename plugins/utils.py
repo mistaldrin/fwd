@@ -45,12 +45,12 @@ class STS:
 
     def store(self, From, to, start_id, end_id):
         self.data[self.id] = {
-            "id": self.id, # Store the task id itself for easy access
+            "id": self.id,
             "FROM": From, 'TO': to, 'total_files': 0,
             'start_id': start_id, 'end_id': end_id,
             'fetched': 0, 'filtered': 0, 'deleted': 0,
-            'duplicate': 0, 'total': abs(end_id - start_id) + 1, 'start': tm.time(),
-            'status': 'initializing' # Add a default status
+            'duplicate': 0, 'total': abs(end_id - start_id) + 1,
+            'start': tm.time(), 'status': 'running', 'batch': []
         }
         self.get(full=True)
         return STS(self.id)
@@ -64,16 +64,28 @@ class STS:
             setattr(self, k, v)
         return self
     
-    def set(self, key, value):
-        if self.id in self.data:
-            self.data[self.id][key] = value
+    def add_to_batch(self, message_id):
+        """Adds a message ID to the current batch for forwarding."""
+        batch = self.get('batch')
+        if batch is not None:
+            batch.append(message_id)
 
+    def get_batch(self):
+        """Returns the current batch of message IDs."""
+        return self.get('batch')
+
+    def clear_batch(self):
+        """Clears the batch."""
+        self.data[self.id]['batch'] = []
+
+    def set_status(self, status):
+        """Sets the current task status (e.g., 'running', 'floodwait')."""
+        self.data[self.id]['status'] = status
+    
     def get_readable_time(self, seconds: int) -> str:
         return get_readable_time(seconds)
 
-    def add(self, key=None, value=1, time=False):
-        if time:
-          self.data[self.id].update({'start': tm.time()})
+    def add(self, key=None, value=1):
         current_value = self.get(key)
         if current_value is not None:
             self.data[self.id].update({key: current_value + value})
@@ -103,7 +115,8 @@ class STS:
         return bot, configs['caption'], configs['forward_tag'], {
             'filters': filters, 'keywords': configs['keywords'],
             'media_size': size, 'extensions': configs['extension'],
-            'skip_duplicate': duplicate, 'forward_delay': configs.get('forward_delay', 1.0)
+            'skip_duplicate': duplicate,
+            'forward_delay': configs.get('forward_delay', 0.5) # Re-added for custom delay
         }, configs['protect'], button
 
 async def start_range_selection(bot, message: Message, from_chat_id, from_title, to_chat_id, start_id, end_id, final_callback_prefix="fwd_final"):
