@@ -131,11 +131,13 @@ async def unequify_continue(bot: Client, message: Message, user_id: int, userbot
     await message.reply_photo(photo=random.choice(SYD), caption=Translation.UNEQUIFY_START_TXT, reply_markup=InlineKeyboardMarkup(buttons))
 
 
-@Client.on_callback_query(filters.regex("^uneq_"))
+# This handler is now more specific to avoid catching status callbacks.
+@Client.on_callback_query(filters.regex("^uneq_(?!status_)"))
 async def unequify_callbacks(bot: Client, query: CallbackQuery):
     user_id = query.from_user.id
     data = query.data.split("_", 1)[1]
     
+    # Handle toggling state without deleting message
     if data.startswith("toggle_"):
         try:
             _, current_state, index_str, session_id = data.split("_", 3)
@@ -150,6 +152,7 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
             logger.error(f"Error toggling unequify state: {e}")
         return
 
+    # For all other actions that change the state, delete the old message
     if query.message:
         await query.message.delete()
 
@@ -195,6 +198,7 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
             logger.error(f"Invalid startscan callback data: {data}")
             await bot.send_message(user_id, "An internal error occurred. Please try again.")
 
+# This handler ONLY deals with the status popup.
 @Client.on_callback_query(filters.regex(r'^uneq_status_'))
 async def get_uneq_status(bot, query):
     task_id = query.data.split("_", 2)[2]
