@@ -23,10 +23,10 @@ CONCURRENCY_LIMIT = 4 # Number of concurrent tasks
 async def process_message_concurrently(
     client, message, sts, caption, forward_tag,
     protect, button, semaphore, frwd_id,
-    progress_lock, status_message
+    progress_lock, status_message, delay
 ):
     """
-    Processes a single message within a concurrent environment.
+    Processes a single message within a concurrent environment, respecting the forward delay.
     """
     async with semaphore:
         if temp.CANCEL.get(frwd_id):
@@ -36,6 +36,7 @@ async def process_message_concurrently(
 
         if not message or message.empty or message.service:
             sts.add('deleted')
+            await asyncio.sleep(delay) # Sleep even on skipped messages to maintain rhythm
             return
 
         # Simple batching for forward_tag mode
@@ -51,10 +52,13 @@ async def process_message_concurrently(
             await copy(client, details, status_message, sts)
             sts.add('total_files')
 
-        # Progress update logic
+        # Progress update logic (locked to prevent race conditions)
         async with progress_lock:
             if sts.get('fetched') % 20 == 0:
                 await edit_progress(status_message, sts, "running")
+        
+        # Respect the user-defined delay after processing each message
+        await asyncio.sleep(delay)
 
 
 # --- Main Task Starter ---
@@ -76,6 +80,9 @@ async def pub_(bot, cb):
     _bot, caption, forward_tag, data_params, protect, button = await sts.get_data(user_id)
     if not _bot:
         return await msg_edit(m, "You haven't added a bot/userbot. Please do so in /settings.", wait=True)
+
+    # Get the user-defined delay
+    delay = data_params.get('forward_delay', 0.5)
 
     await msg_edit(m, "Starting client...")
     try:
@@ -106,11 +113,9 @@ async def pub_(bot, cb):
         await edit_progress(m, sts, "fetching")
 
         if _bot.get('is_bot', False):
-             # Bots use a custom iterator that fetches in chunks
              async for message in client.iter_messages(chat_id=i.FROM, limit=i.end_id, offset=i.start_id):
                  if message: messages_to_process.append(message)
         else:
-             # Userbots use the more efficient get_chat_history
              async for message in client.get_chat_history(chat_id=i.FROM):
                  if message.id > max(i.start_id, i.end_id): continue
                  if message.id < min(i.start_id, i.end_id): break
@@ -130,7 +135,7 @@ async def pub_(bot, cb):
                 process_message_concurrently(
                     client, message, sts, caption, forward_tag,
                     protect, button, semaphore, frwd_id,
-                    progress_lock, m
+                    progress_lock, m, delay # Pass the delay to the worker
                 )
             )
             tasks.append(task)
