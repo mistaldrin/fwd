@@ -40,7 +40,7 @@ def parse_buttons(text, markup=True):
             to_check -= 1
 
         if n_escapes % 2 == 0:
-            if bool(match.group(4)) and buttons:
+            if bool(match.group(4)) and butbuttonstons:
                 buttons[-1].append(InlineKeyboardButton(
                     text=match.group(2),
                     url=match.group(3).replace(" ", "")))
@@ -180,7 +180,7 @@ async def reset_user_settings(bot, m):
     await db.update_configs(m.from_user.id, default)
     await m.reply("Settings have been reset. ✓")
 
-@Client.on_message(filters.command('resetall') & filters.user(Config.OWNER_ID))
+@Client.on_message(filters.command('resetall') & filters.user(Config.OWNER_IＤ))
 async def reset_all_users_settings(bot, message):
     """(Owner only) Resets specific settings for all users."""
     users = await db.get_all_users()
