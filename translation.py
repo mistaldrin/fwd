@@ -95,9 +95,11 @@ Manual input: `/unequify [channel_username_or_id]`"""
 
   STATUS_ALERT = """📊 **Real-Time Status** 📊
 
+`Status:       ` {status}
 `Processed:    ` {fetched} of {total}
-`Success:      ` {forwarded}
-`Skipped:      ` {deleted}
+`Forwarded:    ` {forwarded}
+`Remaining:    ` {remaining}
+`Skipped:      ` {skipped}
 `Progress:     ` {percentage}%
 `ETA:          ` {eta}
 """
@@ -123,3 +125,5 @@ Set a custom delay between forwards. Helps avoid API limits.
 <b>Example:</b> `/forwardelay 0.5`
 
 Default is 1 second."""
+
+}
