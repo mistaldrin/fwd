@@ -1,4 +1,4 @@
-#1
+# mistaldrin/fwd/fwd-dawn-improve-v2/translation.py
 import os
 from config import Config
 
@@ -80,47 +80,47 @@ Manual input: `/unequify [channel_username_or_id]`"""
   BOT_DETAILS = "<b>֎ Bot Details ֎</b>\n\n● <b>Name:</b> <code>{}</code>\n● <b>ID:</b> <code>{}</code>\n● <b>Username:</b> {}"
   USER_DETAILS = "<b>֎ Userbot Details ֎</b>\n\n● <b>Name:</b> <code>{}</code>\n● <b>ID:</b> <code>{}</code>\n● <b>Username:</b> {}"  
          
-  TEXT = """<b>Forwarding Task: `{status}`</b>
+  TEXT = """<b>Status:</b> <code>{status}</code>
 
-`Fetched:    ` {fetched} / {total}
-`Forwarded:  ` {forwarded}
-`Skipped:    ` {skipped}
-`Duplicates: ` {duplicates}
+<b>Fetched:</b> <code>{fetched} / {total}</code>
+<b>Forwarded:</b> <code>{forwarded}</code>
+<b>Skipped:</b> <code>{skipped}</code>
+<b>Duplicates:</b> <code>{duplicates}</code>
 
-`Progress:   ` {progress_bar}
-`Percentage: ` {percentage}%
-`ETA:        ` {eta}
+{progress_bar}
+<b>Progress:</b> <code>{percentage}%</code>
+<b>ETA:</b> <code>{eta}</code>
 """
 
-  UNEQUIFY_TEXT = """<b>Deduplication Task: `{status}`</b>
+  UNEQUIFY_TEXT = """<b>Status:</b> <code>{status}</code>
 
-`Scanned:    ` {scanned} / {total}
-`Deleted:    ` {deleted}
+<b>Scanned:</b> <code>{scanned} / {total}</code>
+<b>Deleted:</b> <code>{deleted}</code>
 
-`Progress:   ` {progress_bar}
-`Percentage: ` {percentage}%
-`ETA:        ` {eta}
+{progress_bar}
+<b>Progress:</b> <code>{percentage}%</code>
+<b>ETA:</b> <code>{eta}</code>
 """
 
-  STATUS_ALERT = """📊 **Real-Time Status** 📊
+  STATUS_ALERT = """📊 <b>Real-Time Status</b> 📊
 
-`Status:       ` {status}
-`Processed:    ` {fetched} of {total}
-`Forwarded:    ` {forwarded}
-`Remaining:    ` {remaining}
-`Skipped:      ` {skipped}
-`Progress:     ` {percentage}%
-`ETA:          ` {eta}
+<b>Status:</b> <code>{status}</code>
+<b>Processed:</b> <code>{fetched} of {total}</code>
+<b>Forwarded:</b> <code>{forwarded}</code>
+<b>Remaining:</b> <code>{remaining}</code>
+<b>Skipped:</b> <code>{skipped}</code>
+<b>Progress:</b> <code>{percentage}%</code>
+<b>ETA:</b> <code>{eta}</code>
 """
   
-  UNEQUIFY_STATUS_ALERT = """📊 **Deduplication Status** 📊
+  UNEQUIFY_STATUS_ALERT = """📊 <b>Deduplication Status</b> 📊
 
-`Status:       ` {status}
-`Scanned:      ` {scanned} of {total}
-`Deleted:      ` {deleted}
-`Remaining:    ` {remaining}
-`Progress:     ` {percentage}%
-`ETA:          ` {eta}
+<b>Status:</b> <code>{status}</code>
+<b>Scanned:</b> <code>{scanned} of {total}</code>
+<b>Deleted:</b> <code>{deleted}</code>
+<b>Remaining:</b> <code>{remaining}</code>
+<b>Progress:</b> <code>{percentage}%</code>
+<b>ETA:</b> <code>{eta}</code>
 """
 
   DOUBLE_CHECK = """<b>֎ Final Check ֎</b>
