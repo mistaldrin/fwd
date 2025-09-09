@@ -69,12 +69,14 @@ async def start_clone_bot(FwdBot, bot_data):
             new_diff = min(200, limit - current)
             if new_diff <= 0:
                 return
-
-            messages = await self.get_messages(chat_id, list(range(current, current + new_diff + 1)))
+            
+            message_ids = list(range(current, current + new_diff + 1))
+            messages = await self.get_messages(chat_id, message_ids)
             
             for message in messages:
                 yield message
-                current += 1
+            
+            current += new_diff
 
    # Correctly bind the function as a method to the client instance if it's a bot.
    if bot_data.get('is_bot', False):
