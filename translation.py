@@ -85,6 +85,7 @@ Manual input: `/unequify [channel_username_or_id]`"""
 <b>Fetched:</b> <code>{fetched} / {total}</code>
 <b>Forwarded:</b> <code>{forwarded}</code>
 <b>Skipped:</b> <code>{skipped}</code>
+<b>Failed:</b> <code>{failed}</code>
 <b>Duplicates:</b> <code>{duplicates}</code>
 
 {progress_bar}
@@ -107,6 +108,7 @@ Manual input: `/unequify [channel_username_or_id]`"""
 <b>Status:</b> <code>{status}</code>
 <b>Processed:</b> <code>{fetched} of {total}</code>
 <b>Forwarded:</b> <code>{forwarded}</code>
+<b>Failed:</b> <code>{failed}</code>
 <b>Remaining:</b> <code>{remaining}</code>
 <b>Skipped:</b> <code>{skipped}</code>
 <b>Progress:</b> <code>{percentage}%</code>
