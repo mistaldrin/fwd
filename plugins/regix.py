@@ -66,30 +66,31 @@ async def pub_(bot, cb):
     temp.lock[user_id] = True
     temp.forwardings += 1
     
-    # Use a safer delay for userbots, but still allow user override
-    min_delay = 1.5 if not _bot.get('is_bot') else 0.5
-    user_delay = data_params.get('forward_delay', 1.0)
-    sleep_duration = max(min_delay, user_delay)
-    
+    sleep_duration = data_params.get('forward_delay', 0.5) # Default to a smaller delay
     sts.add(time=True)
 
     try:
         await edit_progress(m, sts, "running")
         
         MSG_batch = []
-        
-        # This custom iterator from test.py is key to stability
         message_iterator = client.iter_messages(
             chat_id=i.FROM, 
-            limit=max(i.start_id, i.end_id), 
-            offset=min(i.start_id, i.end_id)
+            limit=i.total, # Total number of messages to fetch
+            offset=i.start_id # Starting message ID
         )
         
+        processed_count = 0
         async for message in message_iterator:
             if temp.CANCEL.get(frwd_id):
                 break
+            
+            processed_count += 1
+            await process_message(message, client, sts, forward_tag, MSG_batch, caption, button, protect, m)
 
-            await process_message(message, client, sts, forward_tag, MSG_batch, caption, button, protect, sleep_duration, m)
+            # Adaptive sleep: pause after a batch of operations
+            if processed_count % 10 == 0:
+                await asyncio.sleep(sleep_duration)
+
 
         if forward_tag and MSG_batch: # Forward any remaining messages in the batch
             await forward(client, MSG_batch, m, sts, protect)
@@ -106,7 +107,7 @@ async def pub_(bot, cb):
         await stop(client, user_id, frwd_id, m)
 
 
-async def process_message(message, client, sts, forward_tag, MSG_batch, caption, button, protect, sleep_duration, m):
+async def process_message(message, client, sts, forward_tag, MSG_batch, caption, button, protect, m):
     """Helper function to process a single message inside the main loop."""
     sts.add('fetched')
     
@@ -126,7 +127,6 @@ async def process_message(message, client, sts, forward_tag, MSG_batch, caption,
        details = {"msg_id": message.id, "media": media(message), "caption": new_caption, 'button': button, "protect": protect, "text": message.text.html if message.text else None}
        await copy(client, details, m, sts)
        sts.add('total_files')
-       await asyncio.sleep(sleep_duration)
     
     # Throttled progress update
     current_time = time.time()
@@ -183,7 +183,7 @@ async def copy(bot, msg, m, sts):
         sts.add('deleted')
    except FloodWait as e:
      await edit_progress(m, sts, f"floodwait ({e.value}s)")
-     await asyncio.sleep(e.value)
+     await asyncio.sleep(e.value + 1) # Add a buffer second
      await copy(bot, msg, m, sts) # Retry after floodwait
    except Exception as e:
      logger.warning(f"Failed to copy message {msg.get('msg_id')}: {e}")
@@ -198,7 +198,7 @@ async def forward(bot, msg_ids, m, sts, protect):
            message_ids=msg_ids)
    except FloodWait as e:
      await edit_progress(m, sts, f"floodwait ({e.value}s)")
-     await asyncio.sleep(e.value)
+     await asyncio.sleep(e.value + 1) # Add a buffer second
      await forward(bot, msg_ids, m, sts, protect) # Retry after floodwait
 
 async def msg_edit(msg, text, button=None, wait=None):
