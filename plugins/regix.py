@@ -71,13 +71,12 @@ async def pub_(bot, cb):
     try:
         messages_to_process = []
         
-        # Display the initial progress message right away
-        await edit_progress(m, sts, "Fetching...")
+        await msg_edit(m, "Fetching message list...")
 
         if _bot.get('is_bot', False):
             start_point = min(i.start_id, i.end_id)
             end_point = max(i.start_id, i.end_id)
-            async for message in client.iter_messages(chat_id=i.FROM, limit=end_point, offset=start_point):
+            async for message in client.iter_messages(client, chat_id=i.FROM, limit=end_point, offset=start_point):
                  if message: messages_to_process.append(message)
         else:
             start_point = max(i.start_id, i.end_id)
