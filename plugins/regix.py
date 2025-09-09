@@ -66,8 +66,11 @@ async def pub_(bot, cb):
     temp.lock[user_id] = True
     temp.forwardings += 1
     
-    sleep_duration = data_params.get('forward_delay', 1.0)
-    last_edit_time = time.time()
+    # Use a safer delay for userbots, but still allow user override
+    min_delay = 1.5 if not _bot.get('is_bot') else 0.5
+    user_delay = data_params.get('forward_delay', 1.0)
+    sleep_duration = max(min_delay, user_delay)
+    
     sts.add(time=True)
 
     try:
@@ -75,42 +78,25 @@ async def pub_(bot, cb):
         
         MSG_batch = []
         
-        # Differentiate between userbot and bot for optimal fetching
-        if not _bot.get('is_bot'):
-            # USERBOT LOGIC: More efficient get_chat_history
-            async for message in client.get_chat_history(i.FROM):
-                # The history is fetched in reverse, so we check accordingly
-                if message.id < i.start_id: break
-                if message.id > i.end_id: continue
-                
-                if temp.CANCEL.get(frwd_id): break
-                await process_message(message, client, sts, forward_tag, MSG_batch, caption, button, protect, sleep_duration, m)
-        else:
-            # BOT LOGIC: Fetch in chunks to avoid flood waits
-            current_id = i.start_id
-            while current_id <= i.end_id:
-                if temp.CANCEL.get(frwd_id): break
-                
-                chunk_size = 100 
-                message_ids = list(range(current_id, min(current_id + chunk_size, i.end_id + 1)))
-                if not message_ids: break
+        # This custom iterator from test.py is key to stability
+        message_iterator = client.iter_messages(
+            chat_id=i.FROM, 
+            limit=max(i.start_id, i.end_id), 
+            offset=min(i.start_id, i.end_id)
+        )
+        
+        async for message in message_iterator:
+            if temp.CANCEL.get(frwd_id):
+                break
 
-                try:
-                    messages = await client.get_messages(i.FROM, message_ids)
-                    for message in messages:
-                        await process_message(message, client, sts, forward_tag, MSG_batch, caption, button, protect, sleep_duration, m)
-                except Exception as e:
-                    logger.error(f"Could not get messages chunk: {e}")
-                
-                current_id += chunk_size
-                await asyncio.sleep(1) # Small delay between fetching chunks
+            await process_message(message, client, sts, forward_tag, MSG_batch, caption, button, protect, sleep_duration, m)
 
-        if forward_tag and MSG_batch: # Forward any remaining messages
+        if forward_tag and MSG_batch: # Forward any remaining messages in the batch
             await forward(client, MSG_batch, m, sts, protect)
             sts.add('total_files', len(MSG_batch))
 
         final_status = "cancelled" if temp.CANCEL.get(frwd_id) else "completed"
-        await edit_progress(m, sts, final_status)
+        await edit_progress(m, sts, final_status) 
     
     except Exception as e:
         logger.error(f"Forwarding error: {e}", exc_info=True)
@@ -134,7 +120,7 @@ async def process_message(message, client, sts, forward_tag, MSG_batch, caption,
           await forward(client, MSG_batch, m, sts, protect)
           sts.add('total_files', len(MSG_batch))
           MSG_batch.clear()
-          await asyncio.sleep(10) # API cooldown for batch forwards
+          await asyncio.sleep(5) # API cooldown for batch forwards
     else:
        new_caption = custom_caption(message, caption)
        details = {"msg_id": message.id, "media": media(message), "caption": new_caption, 'button': button, "protect": protect, "text": message.text.html if message.text else None}
@@ -198,7 +184,7 @@ async def copy(bot, msg, m, sts):
    except FloodWait as e:
      await edit_progress(m, sts, f"floodwait ({e.value}s)")
      await asyncio.sleep(e.value)
-     await copy(bot, msg, m, sts)
+     await copy(bot, msg, m, sts) # Retry after floodwait
    except Exception as e:
      logger.warning(f"Failed to copy message {msg.get('msg_id')}: {e}")
      sts.add('deleted')
@@ -213,7 +199,7 @@ async def forward(bot, msg_ids, m, sts, protect):
    except FloodWait as e:
      await edit_progress(m, sts, f"floodwait ({e.value}s)")
      await asyncio.sleep(e.value)
-     await forward(bot, msg_ids, m, sts, protect)
+     await forward(bot, msg_ids, m, sts, protect) # Retry after floodwait
 
 async def msg_edit(msg, text, button=None, wait=None):
     try:
