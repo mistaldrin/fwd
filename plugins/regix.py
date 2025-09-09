@@ -4,7 +4,7 @@ import math
 import time
 import asyncio 
 import logging
-from .utils import STS
+from .utils import STS, get_readable_time
 from database import db 
 from .test import CLIENT, start_clone_bot
 from config import Config, temp
@@ -28,6 +28,7 @@ async def pub_(bot, cb):
     temp.CANCEL[frwd_id] = False
     sts = STS(frwd_id)
     if not sts.verify():
+      await cb.message.delete()
       return await cb.answer("This is an old button, please start over.", show_alert=True)
 
     i = sts.get(full=True)
@@ -70,32 +71,16 @@ async def pub_(bot, cb):
     sts.add(time=True)
 
     try:
-        messages_to_process = []
-        
         await edit_progress(m, sts, "running")
-
-        start_point = i.start_id
-        end_point = i.end_id
         
-        # Determine message iteration logic based on bot type
-        if _bot.get('is_bot', False):
-            message_ids = list(range(min(start_point, end_point), max(start_point, end_point) + 1))
-            for chunk_start in range(0, len(message_ids), 200):
-                chunk = message_ids[chunk_start:chunk_start+200]
-                messages = await client.get_messages(i.FROM, chunk)
-                messages_to_process.extend(messages)
-        else: # Userbot
-             async for message in client.get_chat_history(chat_id=i.FROM):
-                if message.id > max(start_point, end_point): continue
-                if message.id < min(start_point, end_point): break
-                messages_to_process.append(message)
-
-        if start_point > end_point: # Reverse if forwarding older to newer
-            messages_to_process.reverse()
-
+        message_iterator = client.iter_messages(i.FROM, limit=i.total, offset=0)
+        
         MSG_batch = []
         
-        for message in messages_to_process:
+        async for message in message_iterator:
+            if message.id < i.start_id: continue
+            if message.id > i.end_id: continue
+
             if temp.CANCEL.get(frwd_id):
                 await is_cancelled(bot, user_id, m, sts, frwd_id)
                 return
@@ -153,7 +138,7 @@ async def get_frwd_status(bot, query):
     
     speed = i.fetched / diff
     eta_seconds = (i.total - i.fetched) / speed if speed > 0 else 0
-    eta = sts.get_readable_time(int(eta_seconds))
+    eta = get_readable_time(int(eta_seconds))
     percentage = "{:.2f}".format(i.fetched * 100 / i.total) if i.total > 0 else "0.00"
 
     status_text = Translation.STATUS_ALERT.format(
@@ -220,18 +205,46 @@ async def msg_edit(msg, text, button=None, wait=None):
 
 async def edit_progress(msg, sts, status):
     i = sts.get(full=True)
-    
+    if not i: return
+
     if status not in ["cancelled", "completed"]:
-        text = Translation.TEXT.format(status=status, fetched=i.fetched)
+        now = time.time()
+        diff = now - i.start
+        if diff == 0: diff = 1
+
+        speed = i.fetched / diff
+        eta_seconds = (i.total - i.fetched) / speed if speed > 0 else 0
+        eta = get_readable_time(int(eta_seconds))
+        percentage = "{:.2f}".format(i.fetched * 100 / i.total) if i.total > 0 else "0.00"
+
+        progress_bar = "▰{0}▱{1}".format(
+            '▰' * math.floor(float(percentage) / 10),
+            '▱' * (10 - math.floor(float(percentage) / 10))
+        )
+        
+        text = Translation.TEXT.format(
+            fetched=i.fetched,
+            total=i.total,
+            forwarded=i.total_files,
+            skipped=i.deleted + i.filtered,
+            duplicates=i.duplicate,
+            status=status,
+            percentage=percentage,
+            eta=eta,
+            progress_bar=progress_bar
+        )
+        
         button = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"📊 Status 📊", callback_data=f'frwd_status_{i.id}')],
+            [InlineKeyboardButton(f"📊 Status: {percentage}%", callback_data=f'frwd_status_{i.id}')],
             [InlineKeyboardButton('❌ Cancel ❌', f'cancel_task_{i.id}')]
         ])
     else:
         final_text = f"✅ **Task Completed!**\n\n**Processed:** `{i.fetched}`\n**Forwarded:** `{i.total_files}`"
         if status == "cancelled":
             final_text = "❌ **Task Cancelled!**"
-        await msg_edit(msg, final_text)
+        
+        button = InlineKeyboardMarkup([[InlineKeyboardButton("Done!", callback_data="close_btn")]])
+        await msg_edit(msg, final_text, button)
         return
    
     await msg_edit(msg, text, button)
