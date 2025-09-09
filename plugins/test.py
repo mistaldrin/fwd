@@ -1,4 +1,3 @@
-#1
 import os
 import re 
 import sys
