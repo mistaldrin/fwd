@@ -79,18 +79,17 @@ Manual input: `/unequify [channel_username_or_id]`"""
   BOT_DETAILS = "<b>֎ Bot Details ֎</b>\n\n● <b>Name:</b> <code>{}</code>\n● <b>ID:</b> <code>{}</code>\n● <b>Username:</b> {}"
   USER_DETAILS = "<b>֎ Userbot Details ֎</b>\n\n● <b>Name:</b> <code>{}</code>\n● <b>ID:</b> <code>{}</code>\n● <b>Username:</b> {}"  
          
-  TEXT = """<b><u>Forwarding Status</u></b>
+  TEXT = """<b>Forwarding Task: `{status}`</b>
 
-`Fetched:` <b>{fetched} / {total}</b>
-`Forwarded:` <b>{forwarded}</b>
-`Skipped:` <b>{skipped}</b>
-`Duplicates:` <b>{duplicates}</b>
+`Fetched:    ` {fetched} / {total}
+`Forwarded:  ` {forwarded}
+`Skipped:    ` {skipped}
+`Duplicates: ` {duplicates}
 
-`Status:` <b>{status}</b>
-`Percentage:` <b>{percentage}%</b>
-`ETA:` <b>{eta}</b>
-
-{progress_bar}"""
+`Progress:   ` {progress_bar}
+`Percentage: ` {percentage}%
+`ETA:        ` {eta}
+"""
 
   DUPLICATE_TEXT = """**Deduplication Task: `{status}`**"""
 
