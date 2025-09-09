@@ -1,4 +1,3 @@
-# mistaldrin/fwd/fwd-dawn-improve-v2/plugins/public.py
 import re
 import asyncio
 import logging
@@ -119,6 +118,26 @@ async def stateful_message_handler(bot: Client, message: Message):
         
         await start_range_selection(bot, message, from_chat_id, from_title, to_chat_id, 1, end_id)
 
+    elif current_state == "awaiting_range_edit":
+        prompt_id = state_info.get("prompt_message_id")
+        session_id = state_info.get("session_id")
+        value_type = state_info.get("value_type")
+        session = temp.RANGE_SESSIONS.get(session_id)
+
+        try: await bot.delete_messages(user_id, prompt_id)
+        except Exception: pass
+        
+        temp.USER_STATES.pop(user_id, None)
+
+        if not session: return await message.reply("Your session has expired. Please start over.")
+
+        if message.text and message.text.isdigit():
+            session[f'{value_type}_id'] = int(message.text)
+            await update_range_message(bot, session_id, message_to_edit=message)
+        else:
+            await message.reply("Invalid ID provided. The process has been cancelled.")
+            temp.RANGE_SESSIONS.pop(session_id, None)
+
     elif current_state == "awaiting_channel_forward":
         try: await bot.delete_messages(user_id, state_info["prompt_message_id"])
         except Exception: pass
@@ -146,12 +165,9 @@ async def stateful_message_handler(bot: Client, message: Message):
         await CLIENT().add_session(bot, message)
 
     elif current_state in ["awaiting_unequify_manual_target", "awaiting_unequify_chat_selection"]:
-        # Let the unequify handler manage its own states now to prevent conflicts
         pass
 
-
-# --- Callbacks for Interactive Range Selection (SIMPLIFIED) ---
-
+# --- Callbacks for Interactive Range Selection ---
 @Client.on_callback_query(filters.regex(r"^range_"))
 async def range_selection_callbacks(bot, query):
     user_id = query.from_user.id
@@ -179,15 +195,13 @@ async def range_selection_callbacks(bot, query):
     elif action == "edit":
         value_type = parts[2]
         await query.message.delete()
-        try:
-            ask_msg = await bot.ask(user_id, f"Send the new **{value_type.upper()} ID**.", timeout=300)
-            if ask_msg.text and ask_msg.text.isdigit():
-                session[f'{value_type}_id'] = int(ask_msg.text)
-                await update_range_message(bot, session_id, message_to_edit=ask_msg)
-            else:
-                await ask_msg.reply("Invalid ID. Process cancelled.")
-        except asyncio.TimeoutError:
-            await bot.send_message(user_id, "Process timed out.")
+        prompt = await bot.send_message(user_id, f"Send the new **{value_type.upper()} ID**.")
+        temp.USER_STATES[user_id] = {
+            "state": "awaiting_range_edit",
+            "session_id": session_id,
+            "value_type": value_type,
+            "prompt_message_id": prompt.id
+        }
     
     elif action == "confirm":
         await query.message.delete()
@@ -212,7 +226,6 @@ async def show_final_confirmation(bot, session_id):
     message_range_text = f"{min(session['start_id'], session['end_id'])} to {max(session['start_id'], session['end_id'])}"
     forward_id = str(uuid4())
 
-    # THIS is the crucial step that was failing before.
     STS(forward_id).store(From=session['from_chat_id'], to=session['to_chat_id'], start_id=session['start_id'], end_id=session['end_id'])
 
     await bot.send_message(user_id, Translation.DOUBLE_CHECK.format(
