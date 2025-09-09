@@ -1,3 +1,4 @@
+# mistaldrin/fwd/fwd-dawn-improve-v2/plugins/public.py
 import re
 import asyncio
 import logging
@@ -196,6 +197,7 @@ async def range_selection_callbacks(bot, query):
         value_type = parts[2]
         await query.message.delete()
         prompt = await bot.send_message(user_id, f"Send the new **{value_type.upper()} ID**.")
+        # SET THE STATE to wait for the user's next message
         temp.USER_STATES[user_id] = {
             "state": "awaiting_range_edit",
             "session_id": session_id,
