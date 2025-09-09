@@ -131,11 +131,9 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
     data = query.data.split("_", 1)[1]
     
     if query.message and query.data.startswith("toggle_"):
-        # Don't delete for toggle, just edit
-        pass
+        pass # Don't delete for toggle
     elif query.message:
         await query.message.delete()
-
 
     if data == "manual":
         temp.USER_STATES[user_id] = {"state": "awaiting_unequify_manual_target"}
@@ -308,7 +306,6 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
 
 
 async def edit_unequify_progress(msg, scanned, deleted, total, start_time, task_id, status):
-    # Update the stats for the /tasks command
     if temp.ACTIVE_TASKS.get(msg.chat.id, {}).get(task_id):
         temp.ACTIVE_TASKS[msg.chat.id][task_id]["stats"] = {
             "scanned": scanned, "deleted": deleted, "total": total, "start_time": start_time
