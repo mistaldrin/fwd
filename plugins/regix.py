@@ -1,4 +1,3 @@
-# mistaldrin/fwd/fwd-dawn-improve-v2/plugins/regix.py
 import re
 import asyncio
 import logging
@@ -39,6 +38,8 @@ async def message_generator(client, chat_id, start_id, end_id, is_bot, order_asc
                     if message: yield message
             except Exception as e:
                 logger.error(f"Error fetching message chunk for bot: {e}")
+                # Continue to the next chunk
+                continue
     else:
         try:
             async for message in client.get_chat_history(chat_id):
@@ -56,6 +57,8 @@ async def progress_updater(status_message, sts, all_tasks):
     while not all(t.done() for t in all_tasks):
         try:
             await edit_progress(status_message, sts, sts.get('status'))
+        except MessageNotModified:
+            pass # Ignore if the message is the same
         except Exception as e:
             logger.warning(f"Progress updater error: {e}")
         await asyncio.sleep(10)
@@ -95,8 +98,9 @@ async def process_message_concurrently(
             await asyncio.sleep(e.value + 2)
             flood_wait_event.set() # RESUME all other tasks
             sts.set_status("running")
-            # Re-add the task to be processed again
+            # Re-add the task to be processed again without incrementing fetched count
             await process_message_concurrently(client, message, sts, caption, forward_tag, protect, button, semaphore, frwd_id, delay, flood_wait_event)
+            sts.add('fetched', -1) # Decrement fetched since it will be re-incremented
             return # Exit current attempt
         except (MediaEmpty, RPCError) as e:
             logger.warning(f"Skipping message {message.id} due to RPC/Media Error: {e}")
@@ -149,13 +153,14 @@ async def pub_(bot, cb):
     temp.forwardings += 1
 
     updater_task = None
+    tasks = []
+    final_status = "error" # Default to error unless completed successfully
     try:
         await edit_progress(m, sts, "running")
         
         semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
-        tasks = []
         flood_wait_event = asyncio.Event()
-        flood_wait_event.set() # Initially set to allow tasks to run
+        flood_wait_event.set()
 
         is_bot_client = _bot.get('is_bot', False)
         order_asc = i.start_id < i.end_id
@@ -166,9 +171,9 @@ async def pub_(bot, cb):
             task = asyncio.create_task(process_message_concurrently(client, message, sts, caption, forward_tag, protect, button, semaphore, frwd_id, delay, flood_wait_event))
             tasks.append(task)
         
-        updater_task = asyncio.create_task(progress_updater(m, sts, tasks))
-
-        await asyncio.gather(*tasks)
+        if tasks:
+            updater_task = asyncio.create_task(progress_updater(m, sts, tasks))
+            await asyncio.gather(*tasks)
 
         if forward_tag and sts.get_batch():
             for i in range(0, len(sts.get_batch()), 100):
@@ -178,11 +183,9 @@ async def pub_(bot, cb):
         
     except Exception as e:
         logger.error(f"Main forwarding loop error: {e}", exc_info=True)
-        final_status = "error"
     finally:
         if updater_task and not updater_task.done():
             updater_task.cancel()
-        # Final progress update
         await edit_progress(m, sts, final_status)
         await stop(client, user_id, frwd_id, m)
 
@@ -235,7 +238,7 @@ async def msg_edit(msg, text, button=None, wait=None):
             await asyncio.sleep(e.value)
             return await msg_edit(msg, text, button, wait)
     except Exception as e:
-        logger.error(f"Error editing message: {e}")
+        # logger.error(f"Error editing message: {e}")
         return msg
 
 async def edit_progress(msg, sts, status):
@@ -303,3 +306,4 @@ def get_size(size):
 
 def retry_btn(id):
     return InlineKeyboardMarkup([[InlineKeyboardButton('Retry', f"start_public_{id}")]])
+
