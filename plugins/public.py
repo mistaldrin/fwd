@@ -94,7 +94,6 @@ async def stateful_message_handler(bot: Client, message: Message):
     state_info = temp.USER_STATES.get(user_id)
     if not state_info: return
 
-    # Universal cancel
     if message.text and message.text.lower() == "/cancel":
         prompt_id = state_info.get("prompt_message_id")
         if prompt_id:
@@ -105,9 +104,6 @@ async def stateful_message_handler(bot: Client, message: Message):
 
     current_state = state_info.get("state")
 
-    # --- Process based on state ---
-    
-    # Forwarding: Awaiting source message
     if current_state == "awaiting_source":
         try: await bot.delete_messages(user_id, state_info["prompt_message_id"])
         except Exception: pass
@@ -123,12 +119,11 @@ async def stateful_message_handler(bot: Client, message: Message):
         
         await start_range_selection(bot, message, from_chat_id, from_title, to_chat_id, 1, end_id)
 
-    # Settings: Awaiting channel forward
     elif current_state == "awaiting_channel_forward":
         try: await bot.delete_messages(user_id, state_info["prompt_message_id"])
         except Exception: pass
 
-        temp.USER_STATES.pop(user_id, None) # Clear state immediately
+        temp.USER_STATES.pop(user_id, None)
         
         if not message.forward_date:
             return await message.reply("Not a forwarded message. (・_・;)\nProcess cancelled.")
@@ -142,39 +137,20 @@ async def stateful_message_handler(bot: Client, message: Message):
             await db.add_channel(user_id, chat_id, title, username)
             await message.reply("Channel added. ✓")
     
-    # Settings: Awaiting bot token
     elif current_state == "awaiting_bot_token":
         temp.USER_STATES.pop(user_id, None)
-        await CLIENT().add_bot(bot, message) # Pass the whole message to the handler
+        await CLIENT().add_bot(bot, message)
 
-    # Settings: Awaiting user session
     elif current_state == "awaiting_user_session":
         temp.USER_STATES.pop(user_id, None)
-        await CLIENT().add_session(bot, message) # Pass the whole message
+        await CLIENT().add_session(bot, message)
 
-    # Unequify states (from unequify.py, handled here for concurrency safety)
-    elif current_state == "awaiting_unequify_manual_target":
-        target = message.text
-        userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
-        temp.USER_STATES.pop(user_id, None)
-        if not userbot_id: return await message.reply("Userbot selection lost. Please start over.")
-        from plugins.unequify import process_unequify_target
-        await process_unequify_target(bot, message, user_id, userbot_id, target)
-
-    elif current_state == "awaiting_unequify_chat_selection":
-        try: await bot.delete_messages(user_id, state_info["prompt_message"]["id"])
-        except Exception: pass
-        chats = state_info.get("chats", {})
-        selected_chat = chats.get(message.text.strip())
-        temp.USER_STATES.pop(user_id, None)
-        if not selected_chat: return await message.reply("Invalid selection. Please start over.")
-        userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
-        if not userbot_id: return await message.reply("Userbot selection lost. Please start over.")
-        from plugins.unequify import process_unequify_target
-        await process_unequify_target(bot, message, user_id, userbot_id, selected_chat.id)
+    elif current_state in ["awaiting_unequify_manual_target", "awaiting_unequify_chat_selection"]:
+        # Let the unequify handler manage its own states now to prevent conflicts
+        pass
 
 
-# --- Callbacks for Interactive Range Selection ---
+# --- Callbacks for Interactive Range Selection (SIMPLIFIED) ---
 
 @Client.on_callback_query(filters.regex(r"^range_"))
 async def range_selection_callbacks(bot, query):
@@ -188,30 +164,37 @@ async def range_selection_callbacks(bot, query):
 
     if action == "info":
         await query.answer("Displays the current range and order selection.", show_alert=False)
+    
     elif action == "cancel":
         temp.RANGE_SESSIONS.pop(session_id, None)
         await query.message.delete()
         await bot.send_message(user_id, "Operation cancelled.")
+    
     elif action == "swap":
         session['order'] = 'desc' if session['order'] == 'asc' else 'asc'
-        session['start_id'], session['end_id'] = session['end_id'], session['start_id'] # Swap the actual values
+        session['start_id'], session['end_id'] = session['end_id'], session['start_id']
         await update_range_message(bot, session_id, message_to_edit=query.message)
         await query.answer(f"Order swapped!")
+    
     elif action == "edit":
         value_type = parts[2]
         await query.message.delete()
-        prompt = await bot.send_message(user_id, f"Send the new **{value_type.upper()} ID**.")
-        temp.USER_STATES[user_id] = {
-            "state": "awaiting_range_edit",
-            "session_id": session_id,
-            "value_type": value_type,
-            "prompt_message_id": prompt.id
-        }
+        try:
+            ask_msg = await bot.ask(user_id, f"Send the new **{value_type.upper()} ID**.", timeout=300)
+            if ask_msg.text and ask_msg.text.isdigit():
+                session[f'{value_type}_id'] = int(ask_msg.text)
+                await update_range_message(bot, session_id, message_to_edit=ask_msg)
+            else:
+                await ask_msg.reply("Invalid ID. Process cancelled.")
+        except asyncio.TimeoutError:
+            await bot.send_message(user_id, "Process timed out.")
+    
     elif action == "confirm":
         await query.message.delete()
-        if session.get('final_callback') == 'fwd_final':
+        final_callback = session.get('final_callback')
+        if final_callback == 'fwd_final':
             await show_final_confirmation(bot, session_id)
-        elif session.get('final_callback') == 'uneq_final':
+        elif final_callback == 'uneq_final':
             from plugins.unequify import prompt_type_selection
             await prompt_type_selection(bot, query, session_id)
 
@@ -229,6 +212,7 @@ async def show_final_confirmation(bot, session_id):
     message_range_text = f"{min(session['start_id'], session['end_id'])} to {max(session['start_id'], session['end_id'])}"
     forward_id = str(uuid4())
 
+    # THIS is the crucial step that was failing before.
     STS(forward_id).store(From=session['from_chat_id'], to=session['to_chat_id'], start_id=session['start_id'], end_id=session['end_id'])
 
     await bot.send_message(user_id, Translation.DOUBLE_CHECK.format(
