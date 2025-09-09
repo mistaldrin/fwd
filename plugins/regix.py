@@ -67,30 +67,32 @@ async def pub_(bot, cb):
     
     sleep_duration = data_params.get('forward_delay', 1.0)
     last_edit_time = time.time()
+    sts.add(time=True)
 
     try:
         messages_to_process = []
         
-        # Display the initial progress message right away, instead of "Fetching..."
         await edit_progress(m, sts, "running")
 
-        if _bot.get('is_bot', False):
-            start_point = min(i.start_id, i.end_id)
-            end_point = max(i.start_id, i.end_id)
-            # The call is now corrected and matches the function definition.
-            async for message in client.iter_messages(chat_id=i.FROM, limit=end_point, offset=start_point):
-                 if message: messages_to_process.append(message)
-        else:
-            start_point = max(i.start_id, i.end_id)
-            end_point = min(i.start_id, i.end_id)
-            async for message in client.get_chat_history(chat_id=i.FROM):
-                if message.id > start_point: continue
-                if message.id < end_point: break
-                if message: messages_to_process.append(message)
-
-        if i.start_id < i.end_id:
-            messages_to_process.reverse()
+        start_point = i.start_id
+        end_point = i.end_id
         
+        # Determine message iteration logic based on bot type
+        if _bot.get('is_bot', False):
+            message_ids = list(range(start_point, end_point + 1))
+            for i in range(0, len(message_ids), 200):
+                chunk = message_ids[i:i+200]
+                messages = await client.get_messages(i.FROM, chunk)
+                messages_to_process.extend(messages)
+        else: # Userbot
+             async for message in client.get_chat_history(chat_id=i.FROM):
+                if message.id > max(start_point, end_point): continue
+                if message.id < min(start_point, end_point): break
+                messages_to_process.append(message)
+
+        if start_point > end_point: # Reverse if forwarding older to newer
+            messages_to_process.reverse()
+
         MSG_batch = []
         
         for message in messages_to_process:
@@ -218,13 +220,12 @@ async def msg_edit(msg, text, button=None, wait=None):
 
 async def edit_progress(msg, sts, status):
     i = sts.get(full=True)
-    text = Translation.TEXT.format(status=status)
     
-    button = None
     if status not in ["cancelled", "completed"]:
-      button = InlineKeyboardMarkup([
-          [InlineKeyboardButton(f"📊 Status 📊", callback_data=f'frwd_status_{i.id}')],
-          [InlineKeyboardButton('❌ Cancel ❌', f'cancel_task_{i.id}')]
+        text = Translation.TEXT.format(status=status, fetched=i.fetched)
+        button = InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"📊 Status 📊", callback_data=f'frwd_status_{i.id}')],
+            [InlineKeyboardButton('❌ Cancel ❌', f'cancel_task_{i.id}')]
         ])
     else:
         final_text = f"✅ **Task Completed!**\n\n**Processed:** `{i.fetched}`\n**Forwarded:** `{i.total_files}`"
