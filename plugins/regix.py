@@ -66,6 +66,7 @@ async def pub_(bot, cb):
     temp.lock[user_id] = True
     temp.forwardings += 1
     
+    # Respect the user-configured delay from /forwardelay
     sleep_duration = data_params.get('forward_delay', 1.0)
     last_edit_time = time.time()
     sts.add(time=True)
@@ -73,14 +74,12 @@ async def pub_(bot, cb):
     try:
         await edit_progress(m, sts, "running")
         
-        message_iterator = client.iter_messages(i.FROM, limit=i.total, offset=0)
+        # Efficiently iterate through messages
+        message_iterator = client.iter_messages(i.FROM, limit=i.end_id, offset=i.start_id)
         
         MSG_batch = []
         
         async for message in message_iterator:
-            if message.id < i.start_id: continue
-            if message.id > i.end_id: continue
-
             if temp.CANCEL.get(frwd_id):
                 await is_cancelled(bot, user_id, m, sts, frwd_id)
                 return
@@ -93,10 +92,10 @@ async def pub_(bot, cb):
 
             if forward_tag:
                MSG_batch.append(message.id)
-               if len(MSG_batch) >= 100 or (sts.fetched >= i.total):
+               if len(MSG_batch) >= 100:
                   await forward(client, MSG_batch, m, sts, protect)
                   sts.add('total_files', len(MSG_batch))
-                  await asyncio.sleep(10)
+                  await asyncio.sleep(10) # API cooldown for batch forwards
                   MSG_batch = []
             else:
                new_caption = custom_caption(message, caption)
@@ -106,11 +105,11 @@ async def pub_(bot, cb):
                await asyncio.sleep(sleep_duration)
             
             current_time = time.time()
-            if current_time - last_edit_time > 15:
+            if current_time - last_edit_time > 15: # Update progress every 15s
                 await edit_progress(m, sts, "running")
                 last_edit_time = current_time
 
-        if forward_tag and MSG_batch:
+        if forward_tag and MSG_batch: # Forward any remaining messages in the batch
             await forward(client, MSG_batch, m, sts, protect)
             sts.add('total_files', len(MSG_batch))
 
