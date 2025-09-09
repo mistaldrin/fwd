@@ -56,7 +56,7 @@ async def start_clone_bot(FwdBot, bot_data):
    """Starts the client and patches the iter_messages method for bot compatibility."""
    await FwdBot.start()
    
-   # This is the bot-compatible message iterator.
+   # This is the bot-compatible message iterator from mr-syd.
    # 'self' will be the client instance, passed implicitly by __get__.
    async def iter_messages_fixed(
       self, 
@@ -69,17 +69,14 @@ async def start_clone_bot(FwdBot, bot_data):
             new_diff = min(200, limit - current)
             if new_diff <= 0:
                 return
-            
-            # More robust way to generate message IDs for get_messages
-            message_ids = [_ for _ in range(current, current + new_diff)]
-            messages = await self.get_messages(chat_id, message_ids)
 
+            messages = await self.get_messages(chat_id, list(range(current, current + new_diff + 1)))
+            
             for message in messages:
                 yield message
-            
-            current += new_diff
+                current += 1
 
-   # Correctly bind the function as a method to the client instance.
+   # Correctly bind the function as a method to the client instance if it's a bot.
    if bot_data.get('is_bot', False):
        FwdBot.iter_messages = iter_messages_fixed.__get__(FwdBot, Client)
    
