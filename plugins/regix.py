@@ -33,46 +33,51 @@ async def message_generator(client, chat_id, start_id, end_id, is_bot, order_asc
             chunk = message_ids[i:i+100]
             if not chunk: break
             
-            messages = await client.get_messages(chat_id, chunk)
-            for message in messages:
-                if message: yield message
+            try:
+                messages = await client.get_messages(chat_id, chunk)
+                for message in messages:
+                    if message: yield message
+            except Exception as e:
+                logger.error(f"Error fetching message chunk for bot: {e}")
     else:
-        async for message in client.get_chat_history(chat_id):
-            if message.id > max(start_id, end_id): continue
-            if message.id < min(start_id, end_id): break
-            yield message
+        try:
+            async for message in client.get_chat_history(chat_id):
+                if message.id > max(start_id, end_id): continue
+                if message.id < min(start_id, end_id): break
+                yield message
+        except Exception as e:
+            logger.error(f"Error fetching chat history for userbot: {e}")
 
 # --- Dedicated Progress Updater ---
 async def progress_updater(status_message, sts, all_tasks):
     """
-    Updates the progress message at regular intervals.
+    Updates the progress message at regular intervals until all tasks are complete.
     """
     while not all(t.done() for t in all_tasks):
         try:
             await edit_progress(status_message, sts, sts.get('status'))
         except Exception as e:
             logger.warning(f"Progress updater error: {e}")
-        await asyncio.sleep(10) # Update every 10 seconds
+        await asyncio.sleep(10)
 
-
-# --- Concurrent Worker Function ---
+# --- Resilient Concurrent Worker Function ---
 async def process_message_concurrently(
     client, message, sts, caption, forward_tag,
-    protect, button, semaphore, frwd_id, delay
+    protect, button, semaphore, frwd_id, delay, flood_wait_event
 ):
     """
-    Processes a single message within a concurrent environment.
+    Processes a single message within a concurrent environment with robust error handling.
     """
     async with semaphore:
+        await flood_wait_event.wait() # Wait if a floodwait is active
         if temp.CANCEL.get(frwd_id):
             return
 
-        sts.add('fetched')
-
-        if not message or message.empty or message.service:
-            sts.add('deleted')
-        else:
-            try:
+        try:
+            sts.add('fetched')
+            if not message or message.empty or message.service:
+                sts.add('deleted')
+            else:
                 if forward_tag:
                     sts.add_to_batch(message.id)
                     sts.add('total_files')
@@ -84,20 +89,23 @@ async def process_message_concurrently(
                         reply_markup=button, protect_content=protect
                     )
                     sts.add('total_files')
-            except MediaEmpty:
-                sts.add('deleted')
-            except FloodWait as e:
-                sts.set_status(f"floodwait ({e.value}s)")
-                await asyncio.sleep(e.value + 2)
-                sts.set_status("running")
-                await process_message_concurrently(client, message, sts, caption, forward_tag, protect, button, semaphore, frwd_id, delay)
-                return
-            except Exception as e:
-                logger.warning(f"Failed to copy message {message.id} from {sts.get('FROM')}: {e}")
-                sts.add('deleted')
+        except FloodWait as e:
+            sts.set_status(f"floodwait ({e.value}s)")
+            flood_wait_event.clear() # PAUSE all other tasks
+            await asyncio.sleep(e.value + 2)
+            flood_wait_event.set() # RESUME all other tasks
+            sts.set_status("running")
+            # Re-add the task to be processed again
+            await process_message_concurrently(client, message, sts, caption, forward_tag, protect, button, semaphore, frwd_id, delay, flood_wait_event)
+            return # Exit current attempt
+        except (MediaEmpty, RPCError) as e:
+            logger.warning(f"Skipping message {message.id} due to RPC/Media Error: {e}")
+            sts.add('failed')
+        except Exception as e:
+            logger.error(f"FATAL: Failed to process message {message.id}: {e}", exc_info=True)
+            sts.add('failed')
         
         await asyncio.sleep(delay)
-
 
 # --- Main Task Starter ---
 @Client.on_callback_query(filters.regex(r'^start_public'))
@@ -146,35 +154,36 @@ async def pub_(bot, cb):
         
         semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
         tasks = []
-        
+        flood_wait_event = asyncio.Event()
+        flood_wait_event.set() # Initially set to allow tasks to run
+
         is_bot_client = _bot.get('is_bot', False)
         order_asc = i.start_id < i.end_id
         message_gen = message_generator(client, i.FROM, min(i.start_id, i.end_id), max(i.start_id, i.end_id), is_bot_client, order_asc)
 
         async for message in message_gen:
             if temp.CANCEL.get(frwd_id): break
-            task = asyncio.create_task(process_message_concurrently(client, message, sts, caption, forward_tag, protect, button, semaphore, frwd_id, delay))
+            task = asyncio.create_task(process_message_concurrently(client, message, sts, caption, forward_tag, protect, button, semaphore, frwd_id, delay, flood_wait_event))
             tasks.append(task)
         
-        # Start the dedicated progress updater
         updater_task = asyncio.create_task(progress_updater(m, sts, tasks))
 
         await asyncio.gather(*tasks)
 
         if forward_tag and sts.get_batch():
             for i in range(0, len(sts.get_batch()), 100):
-                chunk = sts.get_batch()[i:i+100]
-                await forward(client, chunk, m, sts, protect)
+                await forward(client, sts.get_batch()[i:i+100], m, sts, protect, flood_wait_event)
 
         final_status = "cancelled" if temp.CANCEL.get(frwd_id) else "completed"
-        await edit_progress(m, sts, final_status)
-
+        
     except Exception as e:
-        logger.error(f"Forwarding error: {e}", exc_info=True)
-        await msg_edit(m, f'<b>An error occurred:</b>\n<code>{e}</code>', wait=True)
+        logger.error(f"Main forwarding loop error: {e}", exc_info=True)
+        final_status = "error"
     finally:
         if updater_task and not updater_task.done():
             updater_task.cancel()
+        # Final progress update
+        await edit_progress(m, sts, final_status)
         await stop(client, user_id, frwd_id, m)
 
 
@@ -196,7 +205,7 @@ async def get_frwd_status(bot, query):
     await query.answer(
         Translation.STATUS_ALERT.format(
             status=i.status, fetched=i.fetched, total=i.total, forwarded=i.total_files,
-            remaining=(i.total - i.fetched), skipped=i.deleted + i.filtered,
+            failed=i.failed, remaining=(i.total - i.fetched), skipped=i.deleted + i.filtered,
             percentage=percentage, eta=eta
         ),
         show_alert=True
@@ -204,14 +213,17 @@ async def get_frwd_status(bot, query):
 
 
 # --- Helper functions ---
-async def forward(bot, msg_ids, m, sts, protect):
+async def forward(bot, msg_ids, m, sts, protect, flood_wait_event):
     try:
+        await flood_wait_event.wait()
         await bot.forward_messages(chat_id=sts.get('TO'), from_chat_id=sts.get('FROM'), protect_content=protect, message_ids=msg_ids)
     except FloodWait as e:
         sts.set_status(f"floodwait ({e.value}s)")
+        flood_wait_event.clear()
         await asyncio.sleep(e.value + 2)
+        flood_wait_event.set()
         sts.set_status("running")
-        await forward(bot, msg_ids, m, sts, protect) # Retry
+        await forward(bot, msg_ids, m, sts, protect, flood_wait_event)
 
 async def msg_edit(msg, text, button=None, wait=None):
     try:
@@ -231,7 +243,7 @@ async def edit_progress(msg, sts, status):
     sts.set_status(status)
 
     button = None
-    if status not in ["cancelled", "completed"]:
+    if status not in ["cancelled", "completed", "error"]:
         diff = time.time() - i.start
         if diff == 0: diff = 1
 
@@ -241,14 +253,16 @@ async def edit_progress(msg, sts, status):
 
         text = Translation.TEXT.format(
             status=status, fetched=i.fetched, total=i.total, forwarded=i.total_files,
-            skipped=i.deleted, duplicates=i.duplicate,
+            failed=i.failed, skipped=i.deleted, duplicates=i.duplicate,
             percentage=percentage, eta=eta, progress_bar=progress_bar
         )
         button = InlineKeyboardMarkup([[InlineKeyboardButton(f"📊 Status: {percentage}%", callback_data=f'frwd_status_{i.id}')], [InlineKeyboardButton('❌ Cancel ❌', f'cancel_task_{i.id}')]])
     else:
-        text = f"✅ **Task Completed!**\n\n**Processed:** `{i.fetched}`\n**Forwarded:** `{i.total_files}`"
+        text = f"✅ **Task Completed!**\n\n**Processed:** `{i.fetched}`\n**Forwarded:** `{i.total_files}`\n**Failed:** `{i.failed}`"
         if status == "cancelled":
-            text = f"❌ **Task Cancelled!**\n\n**Processed:** `{i.fetched}`\n**Forwarded:** `{i.total_files}`"
+            text = f"❌ **Task Cancelled!**\n\n**Processed:** `{i.fetched}`\n**Forwarded:** `{i.total_files}`\n**Failed:** `{i.failed}`"
+        elif status == "error":
+            text = f"⚠️ **Error!**\n\nAn unexpected error occurred. Please check the logs.\n**Processed:** `{i.fetched}`"
         button = InlineKeyboardMarkup([[InlineKeyboardButton("Done!", callback_data="close_btn")]])
 
     await msg_edit(msg, text, button)
