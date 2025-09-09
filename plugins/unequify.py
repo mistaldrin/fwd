@@ -1,11 +1,10 @@
-#1
+# mistaldrin/fwd/fwd-dawn-improve-v2/plugins/unequify.py
 import os
 import asyncio
 import io
 import random
 import time
 import math
-import logging
 from uuid import uuid4
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -17,8 +16,6 @@ from .utils import start_range_selection, get_readable_time
 from translation import Translation
 from config import temp
 from database import db
-
-logger = logging.getLogger(__name__)
 
 # --- Constants for the interactive menu ---
 OPTION_LABELS = ["Text", "Photos/Videos", "Audio", "Documents", "Stickers"]
@@ -33,7 +30,7 @@ def create_selection_keyboard(selection_state: str, session_id: str) -> InlineKe
 
     for i, label in enumerate(OPTION_LABELS):
         text = f"✓ {label}" if state_list[i] == '1' else label
-        callback_data = f"uneq_toggle_{selection_state}_{i}_{session_id}"
+        callback_data = f"uneq_toggle_{i}_{session_id}"
         buttons.append([InlineKeyboardButton(text, callback_data=callback_data)])
 
     buttons.append([
@@ -43,22 +40,25 @@ def create_selection_keyboard(selection_state: str, session_id: str) -> InlineKe
     return InlineKeyboardMarkup(buttons)
 
 async def prompt_type_selection(bot, query, session_id):
-    """Sends a new message with the type selection keyboard."""
-    user_id = query.from_user.id
+    """Sends the message with the type selection keyboard."""
+    chat_id = query.from_user.id if isinstance(query, CallbackQuery) else query.chat.id
+
     keyboard = create_selection_keyboard(DEFAULT_STATE, session_id)
-    
     await bot.send_photo(
-        chat_id=user_id,
+        chat_id=chat_id,
         photo=random.choice(SYD),
         caption="<b>Select Message Types</b>\n\nSelect the types of messages to find duplicates of.",
         reply_markup=keyboard
     )
-    await query.answer()
+    if session_id in temp.RANGE_SESSIONS:
+        temp.RANGE_SESSIONS[session_id]['selection_state'] = DEFAULT_STATE
 
 
 @Client.on_message(filters.command("unequify") & filters.private)
 async def unequify_start(bot: Client, message: Message):
-    """Initial entry point for the /unequify command."""
+    """
+    Initial entry point for the /unequify command.
+    """
     user_id = message.from_user.id
     if temp.lock.get(user_id):
         return await message.reply("A task is already in progress. Please wait for it to complete.")
@@ -115,7 +115,7 @@ async def process_unequify_target(bot: Client, message: Message, user_id: int, u
                 last_msg_id = last_message.id
                 break
             await status_msg.delete()
-            await start_range_selection(bot, message, from_chat_id=chat.id, from_title=chat.title, to_chat_id=None, start_id=1, end_id=last_msg_id, final_callback_prefix="uneq_final")
+            await start_range_selection(bot, message, from_chat_id=chat.id, from_title=chat.title, to_chat_id=None, start_id=1, end_id=last_msg_id or 1, final_callback_prefix="uneq_final")
     except (UsernameInvalid, PeerIdInvalid, ChannelInvalid, UsernameNotOccupied) as e:
         await status_msg.edit(f"Could not find the chat: `{e}`. Please check the username/ID and ensure your userbot is a member.")
     except Exception as e:
@@ -131,30 +131,14 @@ async def unequify_continue(bot: Client, message: Message, user_id: int, userbot
     await message.reply_photo(photo=random.choice(SYD), caption=Translation.UNEQUIFY_START_TXT, reply_markup=InlineKeyboardMarkup(buttons))
 
 
-# This handler is now more specific to avoid catching status callbacks.
-@Client.on_callback_query(filters.regex("^uneq_(?!status_)"))
+@Client.on_callback_query(filters.regex("^uneq_"))
 async def unequify_callbacks(bot: Client, query: CallbackQuery):
     user_id = query.from_user.id
     data = query.data.split("_", 1)[1]
     
-    # Handle toggling state without deleting message
-    if data.startswith("toggle_"):
-        try:
-            _, current_state, index_str, session_id = data.split("_", 3)
-            index = int(index_str)
-            state_list = list(current_state)
-            state_list[index] = '1' if state_list[index] == '0' else '0'
-            new_state = "".join(state_list)
-            
-            await query.message.edit_reply_markup(create_selection_keyboard(new_state, session_id))
-            await query.answer()
-        except Exception as e:
-            logger.error(f"Error toggling unequify state: {e}")
-        return
-
-    # For all other actions that change the state, delete the old message
-    if query.message:
-        await query.message.delete()
+    if not (data.startswith("status_") or data.startswith("toggle_")):
+        if query.message:
+            await query.message.delete()
 
     if data == "manual":
         temp.USER_STATES[user_id] = {"state": "awaiting_unequify_manual_target"}
@@ -181,85 +165,75 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
             await status_msg.delete()
             
             prompt_message = await bot.send_message(user_id, text, parse_mode=ParseMode.HTML)
-            temp.USER_STATES[user_id] = {
-                "state": "awaiting_unequify_chat_selection",
-                "chats": chats,
-                "prompt_message": prompt_message
-            }
+            temp.USER_STATES[user_id] = { "state": "awaiting_unequify_chat_selection", "chats": chats, "prompt_message": prompt_message }
         except Exception as e:
             await status_msg.edit(f"An error occurred: `{e}`")
 
-    elif data.startswith("startscan_"):
-        parts = data.split("_", 2)
-        if len(parts) == 3:
-            _, selection_state, session_id = parts
-            await start_deduplication(bot, query, selection_state, session_id)
-        else:
-            logger.error(f"Invalid startscan callback data: {data}")
-            await bot.send_message(user_id, "An internal error occurred. Please try again.")
+    elif data.startswith("toggle_"):
+        _, index_str, session_id = data.split("_")
+        index = int(index_str)
+        
+        session = temp.RANGE_SESSIONS.get(session_id)
+        if not session: return await query.answer("Session expired.", show_alert=True)
 
-# This handler ONLY deals with the status popup.
+        current_state = session.get('selection_state', DEFAULT_STATE)
+        state_list = list(current_state)
+        state_list[index] = '1' if state_list[index] == '0' else '0'
+        new_state = "".join(state_list)
+        session['selection_state'] = new_state
+
+        if query.message:
+            await query.message.edit_reply_markup(create_selection_keyboard(new_state, session_id))
+        await query.answer()
+
+    elif data.startswith("startscan_"):
+        _, selection_state, session_id = data.split("_", 2)
+        await start_deduplication(bot, query, selection_state, session_id)
+
 @Client.on_callback_query(filters.regex(r'^uneq_status_'))
 async def get_uneq_status(bot, query):
     task_id = query.data.split("_", 2)[2]
     task_data = temp.ACTIVE_TASKS.get(query.from_user.id, {}).get(task_id)
-    if not task_data:
-        return await query.answer("This task has completed or been cancelled.", show_alert=True)
+    if not task_data: return await query.answer("This task has completed or been cancelled.", show_alert=True)
     
     stats = task_data.get("stats", {})
-    scanned = stats.get("scanned", 0)
-    total = stats.get("total", 0)
-    deleted = stats.get("deleted", 0)
-    start_time = stats.get("start_time", 0)
-    current_status = stats.get("status", "scanning")
+    scanned, total, deleted = stats.get("scanned", 0), stats.get("total", 0), stats.get("deleted", 0)
+    start_time, status = stats.get("start_time", 0), stats.get("status", "running")
     
-    now = time.time()
-    diff = now - start_time
+    now, diff = time.time(), time.time() - start_time
     if diff == 0: diff = 1
     
     speed = scanned / diff
-    eta_seconds = (total - scanned) / speed if speed > 0 else 0
-    eta = get_readable_time(int(eta_seconds))
-    percentage = "{:.2f}".format(scanned * 100 / total) if total > 0 else "0.00"
+    eta = get_readable_time(int((total - scanned) / speed if speed > 0 else 0))
+    percentage = "{:.2f}".format(scanned * 100 / total if total > 0 else 0.00)
 
-    status_text = Translation.UNEQUIFY_STATUS_ALERT.format(
-        status=current_status,
-        scanned=scanned, 
-        total=total,
-        deleted=deleted,
-        remaining=(total - scanned),
-        percentage=percentage,
-        eta=eta
+    await query.answer(
+        Translation.UNEQUIFY_STATUS_ALERT.format(
+            status=status, scanned=scanned, total=total, deleted=deleted,
+            remaining=(total - scanned), percentage=percentage, eta=eta
+        ),
+        show_alert=True
     )
-    await query.answer(status_text, show_alert=True)
 
 async def start_deduplication(bot: Client, callback_query: CallbackQuery, selection_state: str, session_id: str):
     user_id = callback_query.from_user.id
     task_id = str(uuid4())
     
     range_session = temp.RANGE_SESSIONS.pop(session_id, None)
-    if not range_session:
-        return await bot.send_message(user_id, "Error: Session expired or invalid.")
+    if not range_session: return await bot.send_message(user_id, "Error: Session expired or invalid.")
 
     userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
-    if not userbot_id:
-        return await bot.send_message(user_id, "Error: Bot selection lost.")
+    if not userbot_id: return await bot.send_message(user_id, "Error: Bot selection lost.")
 
     userbot_config = await db.get_bot(user_id, userbot_id)
-    if not userbot_config:
-        return await bot.send_message(user_id, "Error: Userbot not found.")
+    if not userbot_config: return await bot.send_message(user_id, "Error: Userbot not found.")
 
     target_channel, start_id, end_id = range_session['from_chat_id'], min(range_session['start_id'], range_session['end_id']), max(range_session['start_id'], range_session['end_id'])
     
-    status_message = await bot.send_message(user_id, "`Initializing scan...`")
+    status_message = callback_query.message
     
-    if user_id not in temp.ACTIVE_TASKS:
-        temp.ACTIVE_TASKS[user_id] = {}
-    temp.ACTIVE_TASKS[user_id][task_id] = {
-        "process": status_message,
-        "details": {"type": "Deduplication", "from": range_session['from_title'], "to": "N/A"},
-        "stats": {}
-    }
+    if user_id not in temp.ACTIVE_TASKS: temp.ACTIVE_TASKS[user_id] = {}
+    temp.ACTIVE_TASKS[user_id][task_id] = { "process": status_message, "details": {"type": "Deduplication", "from": range_session['from_title'], "to": "N/A"}, "stats": {} }
     temp.CANCEL[task_id] = False
     temp.lock[user_id] = True
 
@@ -267,15 +241,15 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
     total_scanned, total_deleted = 0, 0
     total_in_range = abs(end_id - start_id) + 1
     start_time = time.time()
+    last_edit_time = time.time()
 
     try:
         async with CLIENT().client(userbot_config) as userbot:
             message_ids_to_scan = list(range(start_id, end_id + 1))
             await edit_unequify_progress(status_message, 0, 0, total_in_range, start_time, task_id, "running")
 
-            for i in range(0, len(message_ids_to_scan), 200): # Process in chunks of 200
-                if temp.CANCEL.get(task_id):
-                    break
+            for i in range(0, len(message_ids_to_scan), 200):
+                if temp.CANCEL.get(task_id): break
                 
                 chunk = message_ids_to_scan[i:i+200]
                 messages = await userbot.get_messages(target_channel, chunk)
@@ -286,94 +260,58 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
                     identifier = None
                     
                     if selection_state[0] == '1' and msg.text: identifier = msg.text.strip()
-                    elif selection_state[1] == '1' and (msg.photo or msg.video):
-                        media_obj = msg.photo or msg.video
-                        if media_obj: identifier = getattr(media_obj, 'file_unique_id', None)
+                    elif selection_state[1] == '1' and (msg.photo or msg.video): identifier = (msg.photo or msg.video).file_unique_id
                     elif selection_state[2] == '1' and msg.audio: identifier = msg.audio.file_unique_id
                     elif selection_state[3] == '1' and msg.document: identifier = msg.document.file_unique_id
                     elif selection_state[4] == '1' and msg.sticker: identifier = msg.sticker.file_unique_id
 
-                    if identifier and identifier in seen_identifiers:
-                        duplicates_to_delete.append(msg.id)
-                    elif identifier:
-                        seen_identifiers.add(identifier)
+                    if identifier and identifier in seen_identifiers: duplicates_to_delete.append(msg.id)
+                    elif identifier: seen_identifiers.add(identifier)
 
                 if len(duplicates_to_delete) >= 100:
-                    await delete_batch(userbot, target_channel, duplicates_to_delete)
-                    total_deleted += len(duplicates_to_delete)
+                    deleted_chunk = await userbot.delete_messages(chat_id=target_channel, message_ids=duplicates_to_delete)
+                    total_deleted += deleted_chunk
                     duplicates_to_delete.clear()
-                
-                # Update progress more frequently
-                await edit_unequify_progress(status_message, total_scanned, total_deleted, total_in_range, start_time, task_id, "running")
+                    await asyncio.sleep(5)
+
+                current_time = time.time()
+                if current_time - last_edit_time > 15:
+                    await edit_unequify_progress(status_message, total_scanned, total_deleted, total_in_range, start_time, task_id, "running")
+                    last_edit_time = current_time
 
             if duplicates_to_delete and not temp.CANCEL.get(task_id):
-                await delete_batch(userbot, target_channel, duplicates_to_delete)
-                total_deleted += len(duplicates_to_delete)
-
+                deleted_chunk = await userbot.delete_messages(chat_id=target_channel, message_ids=duplicates_to_delete)
+                total_deleted += deleted_chunk
+            
             final_status = "cancelled" if temp.CANCEL.get(task_id) else "completed"
             await edit_unequify_progress(status_message, total_scanned, total_deleted, total_in_range, start_time, task_id, final_status)
 
     except Exception as e:
         await status_message.edit(f"❌ **An unexpected error occurred.**\n\n`{e}`")
     finally:
-        if temp.ACTIVE_TASKS.get(user_id, {}).get(task_id):
-            del temp.ACTIVE_TASKS[user_id][task_id]
+        if temp.ACTIVE_TASKS.get(user_id, {}).get(task_id): del temp.ACTIVE_TASKS[user_id][task_id]
         temp.CANCEL.pop(task_id, None)
         temp.lock.pop(user_id, None)
 
-async def delete_batch(userbot, chat_id, message_ids):
-    """Deletes a batch of messages with FloodWait handling."""
-    try:
-        await userbot.delete_messages(chat_id=chat_id, message_ids=message_ids)
-        await asyncio.sleep(5) # Cooldown after a successful deletion batch
-    except FloodWait as e:
-        logger.warning(f"FloodWait of {e.value}s while deleting duplicates. Waiting...")
-        await asyncio.sleep(e.value + 2) # Wait and add a buffer
-        await userbot.delete_messages(chat_id=chat_id, message_ids=message_ids) # Retry
-    except Exception as ex:
-        logger.error(f"Could not delete messages: {ex}")
-
 
 async def edit_unequify_progress(msg, scanned, deleted, total, start_time, task_id, status):
-    """Updates the progress message for the unequify task."""
-    
-    # Update stats for the status button popup
     if temp.ACTIVE_TASKS.get(msg.chat.id, {}).get(task_id):
-        temp.ACTIVE_TASKS[msg.chat.id][task_id]["stats"] = {
-            "scanned": scanned, "deleted": deleted, "total": total, 
-            "start_time": start_time, "status": status
-        }
+        temp.ACTIVE_TASKS[msg.chat.id][task_id]["stats"] = { "scanned": scanned, "deleted": deleted, "total": total, "start_time": start_time, "status": status }
     
     button = None
-
     if status not in ["cancelled", "completed"]:
-        now = time.time()
-        diff = now - start_time
+        diff = time.time() - start_time
         if diff == 0: diff = 1
-
         speed = scanned / diff
-        eta_seconds = (total - scanned) / speed if speed > 0 else 0
-        eta = get_readable_time(int(eta_seconds))
-        percentage = "{:.2f}".format(scanned * 100 / total) if total > 0 else "0.00"
+        eta = get_readable_time(int((total - scanned) / speed if speed > 0 else 0))
+        percentage = "{:.2f}".format(scanned * 100 / total if total > 0 else 0.00)
+        progress_bar = "▰{0}▱{1}".format('▰' * math.floor(float(percentage) / 10), '▱' * (10 - math.floor(float(percentage) / 10)))
 
-        progress_bar = "▰{0}▱{1}".format(
-            '▰' * math.floor(float(percentage) / 10),
-            '▱' * (10 - math.floor(float(percentage) / 10))
-        )
-        
         text = Translation.UNEQUIFY_TEXT.format(
-            scanned=scanned,
-            total=total,
-            deleted=deleted,
-            status=status,
-            percentage=percentage,
-            eta=eta,
-            progress_bar=progress_bar
+            status=status, scanned=scanned, total=total, deleted=deleted,
+            percentage=percentage, eta=eta, progress_bar=progress_bar
         )
-        button = InlineKeyboardMarkup([
-            [InlineKeyboardButton(f"📊 Status: {percentage}%", callback_data=f'uneq_status_{task_id}')],
-            [InlineKeyboardButton('❌ Cancel ❌', f'cancel_task_{task_id}')]
-        ])
+        button = InlineKeyboardMarkup([[InlineKeyboardButton(f"📊 Status: {percentage}%", callback_data=f'uneq_status_{task_id}')], [InlineKeyboardButton('❌ Cancel ❌', f'cancel_task_{task_id}')]])
     else:
         text = f"✅ **Deduplication Completed!**\n\n**Scanned:** `{scanned}`\n**Duplicates Deleted:** `{deleted}`"
         if status == "cancelled":
@@ -382,7 +320,5 @@ async def edit_unequify_progress(msg, scanned, deleted, total, start_time, task_
             
     try:
         await msg.edit_text(text, reply_markup=button)
-    except MessageNotModified:
-        pass
-    except Exception as e:
-        logger.error(f"Error updating unequify progress: {e}")
+    except MessageNotModified: pass
+    except Exception as e: print(f"Error updating unequify progress: {e}")
