@@ -1,4 +1,3 @@
-## mistaldrin/fwd/fwd-dawn-improve-v2/plugins/regix.py
 import re
 import asyncio
 import logging
@@ -18,7 +17,7 @@ CLIENT = CLIENT()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# --- Main Task Starter (Simplified, mr-syd Architecture) ---
+# --- Main Task Starter (Final, Simplified mr-syd Architecture) ---
 @Client.on_callback_query(filters.regex(r'^start_public'))
 async def pub_(bot, cb):
     user_id = cb.from_user.id
@@ -63,27 +62,24 @@ async def pub_(bot, cb):
     try:
         await edit_progress(m, sts, "running")
         
-        is_bot_client = _bot.get('is_bot', False)
-        order_asc = i.start_id < i.end_id
-        
-        # This is the new, robust message iterator from test.py
-        message_iterator = client.iter_messages(
-            chat_id=i.FROM,
-            reverse=order_asc # Pyrogram's reverse=True means oldest to newest
-        )
+        # This is the simplified, robust message gathering loop
+        messages_to_process = []
+        async for message in client.get_chat_history(i.FROM):
+            if message.id > max(i.start_id, i.end_id): continue
+            if message.id < min(i.start_id, i.end_id): break
+            messages_to_process.append(message)
 
-        async for message in message_iterator:
+        # Reverse the list if the user wants to forward from oldest to newest
+        if i.start_id < i.end_id:
+            messages_to_process.reverse()
+
+        for message in messages_to_process:
             if temp.CANCEL.get(frwd_id):
                 final_status = "cancelled"
                 break
             
-            # Filter based on message ID range
-            if not (min(i.start_id, i.end_id) <= message.id <= max(i.start_id, i.end_id)):
-                continue
-
             sts.add('fetched')
             
-            # Update progress message every 20 messages
             if sts.get('fetched') % 20 == 0:
                 await edit_progress(m, sts, "running")
 
@@ -91,12 +87,9 @@ async def pub_(bot, cb):
                 sts.add('deleted')
                 continue
 
-            # This is the core fault-tolerance loop
             try:
                 if forward_tag:
-                    # This mode is less common and simpler
                     await message.forward(chat_id=i.TO, protect_content=protect)
-                    sts.add('total_files')
                 else:
                     new_caption = custom_caption(message, caption)
                     await message.copy(
@@ -105,21 +98,18 @@ async def pub_(bot, cb):
                         reply_markup=button,
                         protect_content=protect
                     )
-                    sts.add('total_files')
+                sts.add('total_files')
             except FloodWait as e:
                 sts.set_status(f"floodwait ({e.value}s)")
                 await edit_progress(m, sts, sts.get('status'))
                 await asyncio.sleep(e.value + 2)
                 sts.set_status("running")
-                # Retry the same message
                 try:
-                    if forward_tag:
-                        await message.forward(chat_id=i.TO, protect_content=protect)
-                    else:
-                        await message.copy(chat_id=i.TO, caption=new_caption, reply_markup=button, protect_content=protect)
+                    if forward_tag: await message.forward(chat_id=i.TO, protect_content=protect)
+                    else: await message.copy(chat_id=i.TO, caption=new_caption, reply_markup=button, protect_content=protect)
                     sts.add('total_files')
-                except Exception as e:
-                    logger.error(f"Retry failed for message {message.id}: {e}")
+                except Exception as e_retry:
+                    logger.error(f"Retry failed for message {message.id}: {e_retry}")
                     sts.add('failed')
             except Exception as e:
                 logger.error(f"Failed to process message {message.id}: {e}", exc_info=False)
@@ -135,7 +125,6 @@ async def pub_(bot, cb):
     finally:
         await edit_progress(m, sts, final_status)
         await stop(client, user_id, frwd_id, m)
-
 
 # --- Callbacks ---
 @Client.on_callback_query(filters.regex(r'^frwd_status_'))
@@ -215,7 +204,6 @@ async def stop(client, user_id, task_id, message_obj):
 def custom_caption(msg, caption):
     if not msg: return ""
     
-    # Prioritize message text for text-only messages, otherwise use caption
     fcaption_text = ""
     if msg.text:
         fcaption_text = msg.text.html
@@ -246,3 +234,4 @@ def get_size(size):
 
 def retry_btn(id):
     return InlineKeyboardMarkup([[InlineKeyboardButton('Retry', f"start_public_{id}")]])
+
