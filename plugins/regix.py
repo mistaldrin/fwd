@@ -151,12 +151,21 @@ async def get_frwd_status(bot, query):
     eta_seconds = (i.total - i.fetched) / speed if speed > 0 else 0
     eta = get_readable_time(int(eta_seconds))
     percentage = "{:.2f}".format(i.fetched * 100 / i.total) if i.total > 0 else "0.00"
+    
+    # New calculations for the detailed pop-up
+    remaining = i.total - i.fetched
+    skipped = i.deleted + i.filtered
+    current_status = i.status if hasattr(i, 'status') else "running"
 
     status_text = Translation.STATUS_ALERT.format(
-        fetched=i.fetched, total=i.total,
+        status=current_status,
+        fetched=i.fetched,
+        total=i.total,
         forwarded=i.total_files,
-        deleted=i.deleted + i.filtered,
-        eta=eta, percentage=percentage
+        remaining=remaining,
+        skipped=skipped,
+        percentage=percentage,
+        eta=eta
     )
     await query.answer(status_text, show_alert=True)
 
@@ -217,6 +226,8 @@ async def msg_edit(msg, text, button=None, wait=None):
 async def edit_progress(msg, sts, status):
     i = sts.get(full=True)
     if not i: return
+    
+    sts.set('status', status) # Store the current status string
 
     if status not in ["cancelled", "completed"]:
         now = time.time()
