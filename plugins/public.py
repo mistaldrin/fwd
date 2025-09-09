@@ -1,3 +1,4 @@
+# mistaldrin/fwd/fwd-dawn-improve-v2/plugins/public.py
 import re
 import asyncio
 import logging
@@ -7,6 +8,7 @@ from .utils import STS, start_range_selection, update_range_message
 from database import db
 from config import temp
 from translation import Translation
+from .test import CLIENT
 from pyrogram import Client, filters, enums
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message
 
@@ -40,7 +42,6 @@ async def run(bot, message):
     if temp.lock.get(user_id):
         return await message.reply("A task is already in progress. Please wait for it to complete before starting a new one.")
     
-    # Clear any previous stale state
     temp.USER_STATES.pop(user_id, None)
 
     bots = await db.get_bots(user_id)
@@ -74,120 +75,101 @@ async def prompt_target_channel(bot, message):
 
 @Client.on_callback_query(filters.regex(r'^fwd_target_'))
 async def cb_select_target(bot, query):
-    """
-    Handles target channel selection. Sets user state to await source message.
-    """
     user_id = query.from_user.id
     to_chat_id = int(query.data.split('_')[-1])
     
-    # Set the user's state to wait for the next message (the source)
+    prompt_message = await query.message.edit_text(Translation.FROM_MSG)
     temp.USER_STATES[user_id] = {
         "state": "awaiting_source",
         "to_chat_id": to_chat_id,
-        "prompt_message_id": query.message.id
+        "prompt_message_id": prompt_message.id
     }
-    
-    # Edit the message to ask for the source channel
-    await query.message.edit_text(Translation.FROM_MSG)
 
-
-# --- NEW High-Priority Stateful Message Handler ---
+# --- High-Priority Stateful Message Handler ---
 @Client.on_message(filters.private & filters.incoming, group=-1)
 async def stateful_message_handler(bot: Client, message: Message):
-    """
-    This handler checks for user states and processes messages accordingly.
-    It runs before other handlers due to group=-1.
-    """
-    # Ignore edited messages
-    if message.edit_date:
-        return
+    if message.edit_date: return
 
     user_id = message.from_user.id
     state_info = temp.USER_STATES.get(user_id)
+    if not state_info: return
 
-    # If user has no state, do nothing and let other handlers run
-    if not state_info:
-        return
-
-    # If the user sends a command while in a state, handle it gracefully
-    if message.text and message.text.startswith("/"):
-        # Allow /cancel to work universally
-        if message.text.lower() == "/cancel":
-            prompt_id = state_info.get("prompt_message_id")
-            if prompt_id:
-                try:
-                    await bot.delete_messages(user_id, prompt_id)
-                except Exception:
-                    pass
-            temp.USER_STATES.pop(user_id, None)
-            await message.reply(Translation.CANCEL)
-        else:
-            await message.reply("You are in the middle of a process. Please provide the requested information or use /cancel to abort.")
-        return # Stop further processing in this handler
+    # Universal cancel
+    if message.text and message.text.lower() == "/cancel":
+        prompt_id = state_info.get("prompt_message_id")
+        if prompt_id:
+            try: await bot.delete_messages(user_id, prompt_id)
+            except Exception: pass
+        temp.USER_STATES.pop(user_id, None)
+        return await message.reply(Translation.CANCEL)
 
     current_state = state_info.get("state")
 
-    # --- State: Awaiting Source for /forward ---
+    # --- Process based on state ---
+    
+    # Forwarding: Awaiting source message
     if current_state == "awaiting_source":
-        try:
-            await bot.delete_messages(user_id, state_info["prompt_message_id"])
-        except Exception:
-            pass
-
+        try: await bot.delete_messages(user_id, state_info["prompt_message_id"])
+        except Exception: pass
+        
         to_chat_id = state_info["to_chat_id"]
         from_chat_id, end_id, error = parse_message_input(message)
         
         temp.USER_STATES.pop(user_id, None)
-        
-        if error:
-            await message.reply(error)
-            return
+        if error: return await message.reply(error)
 
-        start_id = 1
+        try: from_title = (await bot.get_chat(from_chat_id)).title
+        except Exception: from_title = "Private/Unknown Chat"
         
-        try:
-            chat_info = await bot.get_chat(from_chat_id)
-            from_title = chat_info.title
-        except Exception:
-            from_title = "Private/Unknown Chat"
-        
-        await start_range_selection(bot, message, from_chat_id, from_title, to_chat_id, start_id, end_id)
+        await start_range_selection(bot, message, from_chat_id, from_title, to_chat_id, 1, end_id)
 
-    # --- State: Awaiting Manual Target for /unequify ---
+    # Settings: Awaiting channel forward
+    elif current_state == "awaiting_channel_forward":
+        try: await bot.delete_messages(user_id, state_info["prompt_message_id"])
+        except Exception: pass
+
+        temp.USER_STATES.pop(user_id, None) # Clear state immediately
+        
+        if not message.forward_date:
+            return await message.reply("Not a forwarded message. (・_・;)\nProcess cancelled.")
+
+        chat_id, title = message.forward_from_chat.id, message.forward_from_chat.title
+        username = f"@{message.forward_from_chat.username}" if message.forward_from_chat.username else "private"
+
+        if await db.in_channel(user_id, chat_id):
+            await message.reply("This channel has already been added.")
+        else:
+            await db.add_channel(user_id, chat_id, title, username)
+            await message.reply("Channel added. ✓")
+    
+    # Settings: Awaiting bot token
+    elif current_state == "awaiting_bot_token":
+        temp.USER_STATES.pop(user_id, None)
+        await CLIENT().add_bot(bot, message) # Pass the whole message to the handler
+
+    # Settings: Awaiting user session
+    elif current_state == "awaiting_user_session":
+        temp.USER_STATES.pop(user_id, None)
+        await CLIENT().add_session(bot, message) # Pass the whole message
+
+    # Unequify states (from unequify.py, handled here for concurrency safety)
     elif current_state == "awaiting_unequify_manual_target":
         target = message.text
         userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
-        
         temp.USER_STATES.pop(user_id, None)
-
-        if not userbot_id:
-            await message.reply("Userbot selection lost. Please start over.")
-            return
-
+        if not userbot_id: return await message.reply("Userbot selection lost. Please start over.")
         from plugins.unequify import process_unequify_target
         await process_unequify_target(bot, message, user_id, userbot_id, target)
 
-    # --- State: Awaiting Chat Selection for /unequify ---
     elif current_state == "awaiting_unequify_chat_selection":
-        try:
-            await bot.delete_messages(user_id, state_info["prompt_message"]["id"])
-        except Exception:
-            pass
-
+        try: await bot.delete_messages(user_id, state_info["prompt_message"]["id"])
+        except Exception: pass
         chats = state_info.get("chats", {})
         selected_chat = chats.get(message.text.strip())
-        
         temp.USER_STATES.pop(user_id, None)
-
-        if not selected_chat:
-            await message.reply("Invalid selection. Please start over.")
-            return
-
+        if not selected_chat: return await message.reply("Invalid selection. Please start over.")
         userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
-        if not userbot_id:
-            await message.reply("Userbot selection lost. Please start over.")
-            return
-        
+        if not userbot_id: return await message.reply("Userbot selection lost. Please start over.")
         from plugins.unequify import process_unequify_target
         await process_unequify_target(bot, message, user_id, userbot_id, selected_chat.id)
 
@@ -206,30 +188,25 @@ async def range_selection_callbacks(bot, query):
 
     if action == "info":
         await query.answer("Displays the current range and order selection.", show_alert=False)
-
     elif action == "cancel":
         temp.RANGE_SESSIONS.pop(session_id, None)
         await query.message.delete()
         await bot.send_message(user_id, "Operation cancelled.")
-
     elif action == "swap":
         session['order'] = 'desc' if session['order'] == 'asc' else 'asc'
-        await update_range_message(bot, session_id, message=query.message)
+        session['start_id'], session['end_id'] = session['end_id'], session['start_id'] # Swap the actual values
+        await update_range_message(bot, session_id, message_to_edit=query.message)
         await query.answer(f"Order swapped!")
-
     elif action == "edit":
         value_type = parts[2]
         await query.message.delete()
-        try:
-            ask_msg = await bot.ask(user_id, f"Send the new **{value_type.upper()} ID**.", timeout=300)
-            if ask_msg.text and ask_msg.text.isdigit():
-                session[f'{value_type}_id'] = int(ask_msg.text)
-                await update_range_message(bot, session_id) # Send a new message with updated buttons
-            else:
-                await ask_msg.reply("Invalid ID. Please start over.")
-        except asyncio.TimeoutError:
-            await bot.send_message(user_id, "Process timed out.")
-        
+        prompt = await bot.send_message(user_id, f"Send the new **{value_type.upper()} ID**.")
+        temp.USER_STATES[user_id] = {
+            "state": "awaiting_range_edit",
+            "session_id": session_id,
+            "value_type": value_type,
+            "prompt_message_id": prompt.id
+        }
     elif action == "confirm":
         await query.message.delete()
         if session.get('final_callback') == 'fwd_final':
@@ -249,11 +226,10 @@ async def show_final_confirmation(bot, session_id):
     _bot, channels = await db.get_bot(user_id, bot_id), await db.get_user_channels(user_id)
     to_title = next((c['title'] for c in channels if c['chat_id'] == session['to_chat_id']), 'Unknown')
     
-    start_id, end_id = (session['end_id'], session['start_id']) if session['order'] == 'desc' else (session['start_id'], session['end_id'])
-    message_range_text = f"{min(start_id, end_id)} to {max(start_id, end_id)}"
+    message_range_text = f"{min(session['start_id'], session['end_id'])} to {max(session['start_id'], session['end_id'])}"
     forward_id = str(uuid4())
 
-    STS(forward_id).store(From=session['from_chat_id'], to=session['to_chat_id'], start_id=start_id, end_id=end_id)
+    STS(forward_id).store(From=session['from_chat_id'], to=session['to_chat_id'], start_id=session['start_id'], end_id=session['end_id'])
 
     await bot.send_message(user_id, Translation.DOUBLE_CHECK.format(
             botname=_bot.get('name', 'N/A'), botuname=_bot.get('username', ''),
@@ -268,7 +244,6 @@ async def show_final_confirmation(bot, session_id):
 @Client.on_callback_query(filters.regex(r'^close_btn$'))
 async def close_callback(bot, query):
     user_id = query.from_user.id
-    # Ensure no lock is active before clearing states
     if not temp.lock.get(user_id):
         temp.USER_STATES.pop(user_id, None)
     await query.message.delete()
