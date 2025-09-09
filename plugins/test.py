@@ -1,4 +1,4 @@
-#1
+# mistaldrin/fwd/fwd-dawn-improve-v2/plugins/test.py
 import os
 import re 
 import sys
@@ -15,7 +15,6 @@ from pyrogram.errors.exceptions.bad_request_400 import AccessTokenExpired, Acces
 from pyrogram.errors import FloodWait
 from config import Config
 from translation import Translation
-
 from typing import Union, Optional, AsyncGenerator
 
 logger = logging.getLogger(__name__)
@@ -57,28 +56,47 @@ async def start_clone_bot(FwdBot, bot_data):
    await FwdBot.start()
    
    # This is the bot-compatible message iterator from mr-syd.
-   # 'self' will be the client instance, passed implicitly by __get__.
+   # It is more efficient than get_messages for large ranges.
    async def iter_messages_fixed(
       self, 
-      chat_id: Union[int, str], 
-      limit: int, 
-      offset: int = 0
+      chat_id: Union[int, str],
+      limit: int = 0,
+      offset: int = 0,
+      reverse: bool = False
       ) -> Optional[AsyncGenerator["types.Message", None]]:
-        current = offset
-        while True:
-            new_diff = min(200, limit - current)
-            if new_diff <= 0:
-                return
-            
-            message_ids = list(range(current, current + new_diff + 1))
-            messages = await self.get_messages(chat_id, message_ids)
-            
-            for message in messages:
+        
+        total = 0
+        
+        if not reverse:
+            # History is fetched from newest to oldest by default
+            async for message in self.get_chat_history(chat_id, limit=0 if limit == 0 else (limit + offset)):
+                if total < offset:
+                    total += 1
+                    continue
                 yield message
+                total += 1
+                if limit != 0 and total >= (limit + offset):
+                    break
+        else:
+            # To get messages from oldest to newest, we need to get the count first
+            count = await self.get_chat_history_count(chat_id)
             
-            current += new_diff
-
-   # Correctly bind the function as a method to the client instance if it's a bot.
+            # Start from the calculated offset from the end
+            for i in range(count - offset, 0, -100):
+                if temp.CANCEL.get(self.me.id): # A way to cancel long fetches
+                    break
+                
+                messages = await self.get_messages(chat_id, list(range(max(1, i - 99), i + 1)))
+                
+                for message in sorted(messages, key=lambda x: x.id):
+                    yield message
+                    total += 1
+                    if limit != 0 and total >= limit:
+                        return # Exit the generator
+                
+                if limit != 0 and total >= limit:
+                    break
+   
    if bot_data.get('is_bot', False):
        FwdBot.iter_messages = iter_messages_fixed.__get__(FwdBot, Client)
    
@@ -103,117 +121,51 @@ class CLIENT:
   async def add_bot(self, bot, query: Union[Message, CallbackQuery]):
      """Handles the conversation flow for adding a new bot."""
      user_id = query.from_user.id
+     msg = query # We no longer use bot.ask, we process the message directly
+     
+     bot_token_match = re.search(r'(\d{8,10}:[a-zA-Z0-9_-]{35})', msg.text)
+     bot_token = bot_token_match.group(1) if bot_token_match else None
+
+     if not bot_token:
+       return await msg.reply_text("No valid bot token found.")
+
      try:
-        msg = await bot.ask(chat_id=user_id, text=BOT_TOKEN_TEXT, timeout=300)
-        
-        if msg.text and msg.text.lower() == '/cancel':
-           return await msg.reply('Process cancelled.')
+       async with self.client(bot_token) as _client:
+          _bot = await _client.get_me()
+     except Exception as e:
+       return await msg.reply_text(f"<b>Bot Error:</b> `{e}`\n\nPlease check the token.")
+     
+     if await db.is_bot_exist(user_id, _bot.id):
+         return await msg.reply_text("This bot has already been added.")
 
-        bot_token_match = re.search(r'(\d{8,10}:[a-zA-Z0-9_-]{35})', msg.text)
-        bot_token = bot_token_match.group(1) if bot_token_match else None
+     details = {
+       'id': _bot.id, 'is_bot': True, 'user_id': user_id,
+       'name': _bot.first_name, 'token': bot_token, 'username': _bot.username 
+     }
+     await db.add_bot(details)
+     await msg.reply_text("Bot token added. ✓")
 
-        if not bot_token:
-          return await msg.reply_text("No valid bot token found.")
-
-        try:
-          async with self.client(bot_token) as _client:
-             _bot = await _client.get_me()
-        except Exception as e:
-          return await msg.reply_text(f"<b>Bot Error:</b> `{e}`\n\nPlease check the token.")
-        
-        if await db.is_bot_exist(user_id, _bot.id):
-            return await msg.reply_text("This bot has already been added.")
-
-        details = {
-          'id': _bot.id,
-          'is_bot': True,
-          'user_id': user_id,
-          'name': _bot.first_name,
-          'token': bot_token,
-          'username': _bot.username 
-        }
-        await db.add_bot(details)
-        return True
-     except asyncio.TimeoutError:
-        await bot.send_message(user_id, "Process timed out.")
-        return False
     
   async def add_session(self, bot, query: Union[Message, CallbackQuery]):
      """Handles the conversation flow for adding a new userbot session."""
      user_id = query.from_user.id
+     msg = query
+     
+     if not msg.text or len(msg.text) < SESSION_STRING_SIZE:
+        return await msg.reply('Not a valid session string.')
+
      try:
-        msg = await bot.ask(chat_id=user_id, text=SESSION_STRING_TEXT, timeout=300)
+       async with self.client(msg.text, True) as client:
+          user = await client.get_me()
+     except Exception as e:
+       return await msg.reply_text(f"<b>Userbot Error:</b> `{e}`\n\nPlease check the session string.")
+     
+     if await db.is_bot_exist(user_id, user.id):
+         return await msg.reply_text("This userbot has already been added.")
 
-        if msg.text and msg.text.lower() == '/cancel':
-           await msg.reply('Process cancelled.')
-           return False
-        elif not msg.text or len(msg.text) < SESSION_STRING_SIZE:
-           return await msg.reply('Not a valid session string.')
-
-        try:
-          async with self.client(msg.text, True) as client:
-             user = await client.get_me()
-        except Exception as e:
-          return await msg.reply_text(f"<b>Userbot Error:</b> `{e}`\n\nPlease check the session string.")
-        
-        if await db.is_bot_exist(user_id, user.id):
-            return await msg.reply_text("This userbot has already been added.")
-
-        details = {
-          'id': user.id,
-          'is_bot': False,
-          'user_id': user_id,
-          'name': user.first_name,
-          'session': msg.text,
-          'username': user.username
-        }
-        await db.add_bot(details)
-        return True
-     except asyncio.TimeoutError:
-        await bot.send_message(user_id, "Process timed out.")
-        return False
-
-@Client.on_message(filters.private & filters.command('reset'))
-async def reset_user_settings(bot, m):
-    """Resets a user's settings to default."""
-    default = await db.get_configs("01")
-    await db.update_configs(m.from_user.id, default)
-    await m.reply("Settings have been reset. ✓")
-
-@Client.on_message(filters.command('resetall') & filters.user(Config.OWNER_ID))
-async def reset_all_users_settings(bot, message):
-    """(Owner only) Resets specific settings for all users."""
-    users = await db.get_all_users()
-    sts = await message.reply("Processing...")
-    TEXT = "Total: {}\nSuccess: {}\nFailed: {}"
-    total = success = failed = 0
-    ERRORS = []
-    async for user in users:
-        user_id = user['id']
-        default = await get_configs(user_id)
-        default['db_uri'] = None
-        total += 1
-        if total % 10 == 0:
-           await sts.edit(TEXT.format(total, success, failed))
-        try: 
-           await db.update_configs(user_id, default)
-           success += 1
-        except Exception as e:
-           ERRORS.append(e)
-           failed += 1
-    if ERRORS:
-       await message.reply(ERRORS[:100])
-    await sts.edit("Completed\n" + TEXT.format(total, success, failed))
-  
-async def get_configs(user_id):
-    """Retrieves user configurations from the database."""
-    return await db.get_configs(user_id)
-
-async def update_configs(user_id, key, value):
-    """Updates a specific configuration key for a user."""
-    current = await db.get_configs(user_id)
-    if key in ['caption', 'duplicate', 'db_uri', 'forward_tag', 'protect', 'file_size', 'size_limit', 'extension', 'keywords', 'button', 'forward_delay']:
-       current[key] = value
-    elif key in current.get('filters', {}):
-       current['filters'][key] = value
-    await db.update_configs(user_id, current)
+     details = {
+       'id': user.id, 'is_bot': False, 'user_id': user_id,
+       'name': user.first_name, 'session': msg.text, 'username': user.username
+     }
+     await db.add_bot(details)
+     await msg.reply_text("Session added. ✓")
