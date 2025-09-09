@@ -5,6 +5,7 @@ import io
 import random
 import time
 import math
+import logging
 from uuid import uuid4
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -16,6 +17,8 @@ from .utils import start_range_selection, get_readable_time
 from translation import Translation
 from config import temp
 from database import db
+
+logger = logging.getLogger(__name__)
 
 # --- Constants for the interactive menu ---
 OPTION_LABELS = ["Text", "Photos/Videos", "Audio", "Documents", "Stickers"]
@@ -40,32 +43,22 @@ def create_selection_keyboard(selection_state: str, session_id: str) -> InlineKe
     ])
     return InlineKeyboardMarkup(buttons)
 
-async def prompt_type_selection(bot, query_or_message, session_id):
-    """Sends the message with the type selection keyboard."""
-    user_id = query_or_message.from_user.id
+async def prompt_type_selection(bot, query, session_id):
+    """
+    Sends a new message with the type selection keyboard.
+    This is called after the range selection menu is deleted.
+    """
+    user_id = query.from_user.id
     keyboard = create_selection_keyboard(DEFAULT_STATE, session_id)
     
-    # If it's a callback query, we should edit the existing message.
-    if isinstance(query_or_message, CallbackQuery):
-        try:
-            await query_or_message.message.edit_caption(
-                caption="<b>Select Message Types</b>\n\nSelect the types of messages to find duplicates of.",
-                reply_markup=keyboard
-            )
-            await query_or_message.answer()
-            return
-        except (MessageNotModified, AttributeError): # Fallback if edit fails or it's not a photo
-            pass
-
-    # For a new message or fallback
     await bot.send_photo(
         chat_id=user_id,
         photo=random.choice(SYD),
         caption="<b>Select Message Types</b>\n\nSelect the types of messages to find duplicates of.",
         reply_markup=keyboard
     )
-    if isinstance(query_or_message, CallbackQuery):
-        await query_or_message.answer()
+    # Acknowledge the button press from the previous (now deleted) message
+    await query.answer()
 
 
 @Client.on_message(filters.command("unequify") & filters.private)
@@ -150,7 +143,6 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
     user_id = query.from_user.id
     data = query.data.split("_", 1)[1]
     
-    # --- BUG FIX: Handle toggle separately to prevent message deletion ---
     if data.startswith("toggle_"):
         try:
             _, current_state, index_str, session_id = data.split("_", 3)
@@ -160,12 +152,11 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
             new_state = "".join(state_list)
             
             await query.message.edit_reply_markup(create_selection_keyboard(new_state, session_id))
-            await query.answer() # Acknowledge the press
+            await query.answer()
         except Exception as e:
             logger.error(f"Error toggling unequify state: {e}")
-        return # Stop further processing for this callback
+        return
 
-    # For other actions, delete the menu message
     if query.message:
         await query.message.delete()
 
