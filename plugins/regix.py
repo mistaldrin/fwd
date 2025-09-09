@@ -71,12 +71,13 @@ async def pub_(bot, cb):
     try:
         messages_to_process = []
         
-        await msg_edit(m, "Fetching message list...")
+        # Display the initial progress message right away, instead of "Fetching..."
+        await edit_progress(m, sts, "running")
 
         if _bot.get('is_bot', False):
             start_point = min(i.start_id, i.end_id)
             end_point = max(i.start_id, i.end_id)
-            # The call is now corrected and does not pass the extra client argument.
+            # The call is now corrected and matches the function definition.
             async for message in client.iter_messages(chat_id=i.FROM, limit=end_point, offset=start_point):
                  if message: messages_to_process.append(message)
         else:
@@ -90,8 +91,6 @@ async def pub_(bot, cb):
         if i.start_id < i.end_id:
             messages_to_process.reverse()
         
-        await edit_progress(m, sts, "running")
-
         MSG_batch = []
         
         for message in messages_to_process:
