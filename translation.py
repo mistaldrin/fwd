@@ -30,6 +30,7 @@ Available commands:
 ▸ Forwards from public & private channels.
 ▸ Custom captions & buttons.
 ▸ Skips duplicates automatically.
+▸ High-speed concurrent forwarding with adjustable delay.
 """
   
   HOW_USE_TXT = """<b>֎ How to Use ֎</b>
@@ -142,4 +143,4 @@ Set a custom delay between forwards. Helps avoid API limits.
 <b>Usage:</b> `/forwardelay [seconds]`
 <b>Example:</b> `/forwardelay 0.5`
 
-Default is 1 second."""
+Default is 0.5 seconds in high-speed mode."""
