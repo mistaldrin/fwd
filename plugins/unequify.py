@@ -130,8 +130,12 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
     user_id = query.from_user.id
     data = query.data.split("_", 1)[1]
     
-    if query.message:
+    if query.message and query.data.startswith("toggle_"):
+        # Don't delete for toggle, just edit
+        pass
+    elif query.message:
         await query.message.delete()
+
 
     if data == "manual":
         temp.USER_STATES[user_id] = {"state": "awaiting_unequify_manual_target"}
@@ -249,6 +253,7 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
     try:
         async with CLIENT().client(userbot_config) as userbot:
             message_ids_to_scan = list(range(start_id, end_id + 1))
+            await edit_unequify_progress(status_message, 0, 0, total_in_range, start_time, task_id, "running")
 
             for i in range(0, len(message_ids_to_scan), 200):
                 if temp.CANCEL.get(task_id):
@@ -303,9 +308,11 @@ async def start_deduplication(bot: Client, callback_query: CallbackQuery, select
 
 
 async def edit_unequify_progress(msg, scanned, deleted, total, start_time, task_id, status):
-    temp.ACTIVE_TASKS[msg.chat.id][task_id]["stats"] = {
-        "scanned": scanned, "deleted": deleted, "total": total, "start_time": start_time
-    }
+    # Update the stats for the /tasks command
+    if temp.ACTIVE_TASKS.get(msg.chat.id, {}).get(task_id):
+        temp.ACTIVE_TASKS[msg.chat.id][task_id]["stats"] = {
+            "scanned": scanned, "deleted": deleted, "total": total, "start_time": start_time
+        }
     
     text = Translation.DUPLICATE_TEXT.format(status=status)
     button = None
