@@ -56,17 +56,15 @@ async def start_clone_bot(FwdBot, bot_data):
    await FwdBot.start()
    
    # This is the bot-compatible message iterator from the reference repo.
-   # It's defined as a local function, not a method.
    async def iter_messages_fixed(
       self, 
-      client, # The first arg is the client instance itself
       chat_id: Union[int, str], 
       limit: int, 
       offset: int = 0
       ) -> Optional[AsyncGenerator["types.Message", None]]:
         current = offset
         while True:
-            new_diff = min(100, limit - current) # Batch size of 100
+            new_diff = min(100, limit - current)
             if new_diff <= 0:
                 return
             
@@ -79,9 +77,8 @@ async def start_clone_bot(FwdBot, bot_data):
             current += new_diff
 
    # Direct assignment, as seen in the working reference repository.
-   # This is the key to making it work without `__get__`.
    if bot_data.get('is_bot', False):
-       FwdBot.iter_messages = iter_messages_fixed
+       FwdBot.iter_messages = iter_messages_fixed.__get__(FwdBot, Client)
    
    return FwdBot
 
