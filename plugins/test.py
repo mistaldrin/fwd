@@ -1,173 +1,237 @@
-import os
-import re 
-import sys
-import typing
-import asyncio 
-import logging 
-from uuid import uuid4
-from database import db 
+import re
+import asyncio
+import logging
+import math
+import time
+from .utils import STS
+from database import db
+from .test import CLIENT, start_clone_bot
 from config import Config, temp
-from pyrogram import Client, filters, types
-from pyrogram.raw.all import layer
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message 
-from pyrogram.errors.exceptions.bad_request_400 import AccessTokenExpired, AccessTokenInvalid
-from pyrogram.errors import FloodWait
-from config import Config
 from translation import Translation
-from typing import Union, Optional, AsyncGenerator
+from pyrogram import Client, filters
+from pyrogram.enums import ParseMode
+from pyrogram.errors import FloodWait, MessageNotModified, RPCError, MediaEmpty
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message
 
+CLIENT = CLIENT()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-BOT_TOKEN_TEXT = "1. Go to @BotFather and send `/newbot`.\n\n2. Get the bot token from the reply.\n\n3. Forward that message here or just send the token.\n\n/cancel - to cancel."
-SESSION_STRING_TEXT = "<b>A friendly heads-up!</b> (｡•̀ᴗ-)✧\n\nUsing a user account for automation can be risky. It's a good idea to use an alternate account for this.\n\nThe developer is not responsible for what happens.\n\n<b>Send the Pyrogram (v2) session string.</b>\n\nGet one from @mdsessiongenbot.\n\n/cancel - to cancel."
-SESSION_STRING_SIZE = 351
-BTN_URL_REGEX = re.compile(r"(\[([^\[]+?)]\[buttonurl:/{0,2}(.+?)(:same)?])")
+# --- Main Task Starter (Final, Simplified mr-syd Architecture) ---
+@Client.on_callback_query(filters.regex(r'^start_public'))
+async def pub_(bot, cb):
+    user_id = cb.from_user.id
+    if temp.lock.get(user_id):
+        return await cb.answer("Please wait for the previous task to complete!", show_alert=True)
 
+    frwd_id = cb.data.split("_")[2]
+    temp.CANCEL[frwd_id] = False
+    sts = STS(frwd_id)
+    if not sts.verify():
+        return await cb.answer("This is an old button, please start over.", show_alert=True)
 
-def parse_buttons(text, markup=True):
-    """Parses button markdown into a Pyrogram InlineKeyboardMarkup."""
-    buttons = []
-    if not text:
-        return None
-    for match in BTN_URL_REGEX.finditer(text):
-        n_escapes = 0
-        to_check = match.start(1) - 1
-        while to_check > 0 and text[to_check] == "\\":
-            n_escapes += 1
-            to_check -= 1
+    i = sts.get(full=True)
+    m = await msg_edit(cb.message, "Verifying...")
 
-        if n_escapes % 2 == 0:
-            if bool(match.group(4)) and buttons:
-                buttons[-1].append(InlineKeyboardButton(
-                    text=match.group(2),
-                    url=match.group(3).replace(" ", "")))
-            else:
-                buttons.append([InlineKeyboardButton(
-                    text=match.group(2),
-                    url=match.group(3).replace(" ", ""))])
-    if markup and buttons:
-       buttons = InlineKeyboardMarkup(buttons)
-    return buttons if buttons else None
+    _bot, caption, forward_tag, data_params, protect, button = await sts.get_data(user_id)
+    if not _bot:
+        return await msg_edit(m, "You haven't added a bot/userbot. Please do so in /settings.", wait=True)
 
-async def start_clone_bot(FwdBot, bot_data):
-   """
-   Starts the client. The complex iterator has been removed in favor of Pyrogram's
-   native get_chat_history, which is handled directly in regix.py for simplicity and reliability.
-   """
-   await FwdBot.start()
-   return FwdBot
+    delay = data_params.get('forward_delay', 0.5)
 
-class CLIENT: 
-  def __init__(self):
-     self.api_id = Config.API_ID
-     self.api_hash = Config.API_HASH
+    await msg_edit(m, "Starting client...")
+    try:
+        client = await start_clone_bot(CLIENT.client(_bot), _bot)
+    except Exception as e:
+        return await m.edit(f"Failed to start client: {e}")
+
+    await msg_edit(m, "Accessing channels...")
+    try:
+        from_chat_details, to_chat_details = await client.get_chat(i.FROM), await client.get_chat(i.TO)
+        from_title, to_title = from_chat_details.title, to_chat_details.title
+    except Exception as e:
+        await msg_edit(m, f"Error accessing source/target chat: {e}\n\nMake sure your bot/userbot has access.", retry_btn(frwd_id), True)
+        return await stop(client, user_id, frwd_id, m)
+
+    if user_id not in temp.ACTIVE_TASKS: temp.ACTIVE_TASKS[user_id] = {}
+    temp.ACTIVE_TASKS[user_id][frwd_id] = { "process": m, "details": {"type": "Forwarding", "from": from_title, "to": to_title} }
+    temp.lock[user_id] = True
+    temp.forwardings += 1
     
-  def client(self, data, user=None):
-     """Creates a Pyrogram client instance."""
-     client_name = str(uuid4())
-     if user is None and isinstance(data, dict) and not data.get('is_bot'):
-        return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, session_string=data.get('session'), in_memory=True)
-     elif user is True:
-        return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, session_string=data, in_memory=True)
-     else:
-        token = data.get('token') if isinstance(data, dict) else data
-        return Client(name=client_name, api_id=self.api_id, api_hash=self.api_hash, bot_token=token, in_memory=True)
-  
-  async def add_bot(self, bot, query: Union[Message, CallbackQuery]):
-     """Handles the conversation flow for adding a new bot."""
-     user_id = query.from_user.id
-     msg = query
-     
-     bot_token_match = re.search(r'(\d{8,10}:[a-zA-Z0-9_-]{35})', msg.text)
-     bot_token = bot_token_match.group(1) if bot_token_match else None
+    final_status = "error"
+    try:
+        await edit_progress(m, sts, "running")
+        
+        # This is the simplified, robust message gathering loop
+        messages_to_process = []
+        async for message in client.get_chat_history(i.FROM):
+            if message.id > max(i.start_id, i.end_id): continue
+            if message.id < min(i.start_id, i.end_id): break
+            messages_to_process.append(message)
 
-     if not bot_token:
-       return await msg.reply_text("No valid bot token found.")
+        # Reverse the list if the user wants to forward from oldest to newest
+        if i.start_id < i.end_id:
+            messages_to_process.reverse()
 
-     try:
-       async with self.client(bot_token) as _client:
-          _bot = await _client.get_me()
-     except Exception as e:
-       return await msg.reply_text(f"<b>Bot Error:</b> `{e}`\n\nPlease check the token.")
-     
-     if await db.is_bot_exist(user_id, _bot.id):
-         return await msg.reply_text("This bot has already been added.")
+        for message in messages_to_process:
+            if temp.CANCEL.get(frwd_id):
+                final_status = "cancelled"
+                break
+            
+            sts.add('fetched')
+            
+            if sts.get('fetched') % 20 == 0:
+                await edit_progress(m, sts, "running")
 
-     details = {
-       'id': _bot.id, 'is_bot': True, 'user_id': user_id,
-       'name': _bot.first_name, 'token': bot_token, 'username': _bot.username 
-     }
-     await db.add_bot(details)
-     await msg.reply_text("Bot token added. ✓")
+            if not message or message.empty or message.service:
+                sts.add('deleted')
+                continue
 
+            try:
+                if forward_tag:
+                    await message.forward(chat_id=i.TO, protect_content=protect)
+                else:
+                    new_caption = custom_caption(message, caption)
+                    await message.copy(
+                        chat_id=i.TO,
+                        caption=new_caption,
+                        reply_markup=button,
+                        protect_content=protect
+                    )
+                sts.add('total_files')
+            except FloodWait as e:
+                sts.set_status(f"floodwait ({e.value}s)")
+                await edit_progress(m, sts, sts.get('status'))
+                await asyncio.sleep(e.value + 2)
+                sts.set_status("running")
+                try:
+                    if forward_tag: await message.forward(chat_id=i.TO, protect_content=protect)
+                    else: await message.copy(chat_id=i.TO, caption=new_caption, reply_markup=button, protect_content=protect)
+                    sts.add('total_files')
+                except Exception as e_retry:
+                    logger.error(f"Retry failed for message {message.id}: {e_retry}")
+                    sts.add('failed')
+            except Exception as e:
+                logger.error(f"Failed to process message {message.id}: {e}", exc_info=False)
+                sts.add('failed')
+
+            await asyncio.sleep(delay)
+
+        if not temp.CANCEL.get(frwd_id):
+            final_status = "completed"
+
+    except Exception as e:
+        logger.error(f"Main forwarding loop error: {e}", exc_info=True)
+    finally:
+        await edit_progress(m, sts, final_status)
+        await stop(client, user_id, frwd_id, m)
+
+# --- Callbacks ---
+@Client.on_callback_query(filters.regex(r'^frwd_status_'))
+async def get_frwd_status(bot, query):
+    task_id = query.data.split("_", 2)[2]
+    sts = STS(task_id)
+    if not sts.verify(): return await query.answer("This task has completed or been cancelled.", show_alert=True)
+
+    i = sts.get(full=True)
+    diff = time.time() - i.start
+    if diff == 0: diff = 1
+
+    speed = i.fetched / diff
+    eta = sts.get_readable_time(int((i.total - i.fetched) / speed if speed > 0 else 0))
+    percentage = "{:.2f}".format(i.fetched * 100 / i.total if i.total > 0 else 0.00)
+
+    await query.answer(
+        Translation.STATUS_ALERT.format(
+            status=i.status, fetched=i.fetched, total=i.total, forwarded=i.total_files,
+            failed=i.failed, remaining=(i.total - i.fetched), skipped=i.deleted + i.filtered,
+            percentage=percentage, eta=eta
+        ),
+        show_alert=True
+    )
+
+# --- Helper functions ---
+async def msg_edit(msg, text, button=None, wait=None):
+    try:
+        return await msg.edit(text, reply_markup=button, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    except MessageNotModified:
+        return msg
+    except FloodWait as e:
+        if wait:
+            await asyncio.sleep(e.value)
+            return await msg_edit(msg, text, button, wait)
+    except Exception as e:
+        return msg
+
+async def edit_progress(msg, sts, status):
+    i = sts.get(full=True)
+    sts.set_status(status)
+
+    button = None
+    if status not in ["cancelled", "completed", "error"]:
+        diff = time.time() - i.start
+        if diff == 0: diff = 1
+
+        eta = sts.get_readable_time(int((i.total - i.fetched) / (i.fetched / diff) if (i.fetched / diff) > 0 else 0))
+        percentage = "{:.2f}".format(i.fetched * 100 / i.total if i.total > 0 else 0.00)
+        progress_bar = "▰{0}▱{1}".format('▰' * math.floor(float(percentage) / 10), '▱' * (10 - math.floor(float(percentage) / 10)))
+
+        text = Translation.TEXT.format(
+            status=status, fetched=i.fetched, total=i.total, forwarded=i.total_files,
+            failed=i.failed, skipped=i.deleted, duplicates=i.duplicate,
+            percentage=percentage, eta=eta, progress_bar=progress_bar
+        )
+        button = InlineKeyboardMarkup([[InlineKeyboardButton(f"📊 Status: {percentage}%", callback_data=f'frwd_status_{i.id}')], [InlineKeyboardButton('❌ Cancel ❌', f'cancel_task_{i.id}')]])
+    else:
+        text = f"✅ **Task Completed!**\n\n**Processed:** `{i.fetched}`\n**Forwarded:** `{i.total_files}`\n**Failed:** `{i.failed}`"
+        if status == "cancelled":
+            text = f"❌ **Task Cancelled!**\n\n**Processed:** `{i.fetched}`\n**Forwarded:** `{i.total_files}`\n**Failed:** `{i.failed}`"
+        elif status == "error":
+            text = f"⚠️ **Error!**\n\nAn unexpected error occurred. Check logs.\n**Processed:** `{i.fetched}`"
+        button = InlineKeyboardMarkup([[InlineKeyboardButton("Done!", callback_data="close_btn")]])
+
+    await msg_edit(msg, text, button)
+
+async def stop(client, user_id, task_id, message_obj):
+    try: await client.stop()
+    except: pass
+    if temp.ACTIVE_TASKS.get(user_id, {}).get(task_id): del temp.ACTIVE_TASKS[user_id][task_id]
+    temp.CANCEL.pop(task_id, None)
+    await db.rmve_frwd(user_id)
+    if temp.forwardings > 0: temp.forwardings -= 1
+    temp.lock.pop(user_id, None)
+
+def custom_caption(msg, caption):
+    if not msg: return ""
     
-  async def add_session(self, bot, query: Union[Message, CallbackQuery]):
-     """Handles the conversation flow for adding a new userbot session."""
-     user_id = query.from_user.id
-     msg = query
-     
-     if not msg.text or len(msg.text) < SESSION_STRING_SIZE:
-        return await msg.reply('Not a valid session string.')
+    fcaption_text = ""
+    if msg.text:
+        fcaption_text = msg.text.html
+    elif msg.caption:
+        fcaption_text = msg.caption.html
+    
+    if not caption: return fcaption_text
+    
+    file_name, file_size = "", "0 B"
+    if msg.media:
+        media = getattr(msg, msg.media.value, None)
+        if media:
+            file_name = getattr(media, 'file_name', '')
+            file_size = get_size(getattr(media, 'file_size', 0))
+    
+    return caption.format(filename=file_name, size=file_size, caption=fcaption_text)
 
-     try:
-       async with self.client(msg.text, True) as client:
-          user = await client.get_me()
-     except Exception as e:
-       return await msg.reply_text(f"<b>Userbot Error:</b> `{e}`\n\nPlease check the session string.")
-     
-     if await db.is_bot_exist(user_id, user.id):
-         return await msg.reply_text("This userbot has already been added.")
+def get_size(size):
+    try:
+        if not size: return "0 B"
+        units, size = ["B", "KB", "MB", "GB", "TB"], float(size)
+        i = 0
+        while size >= 1024.0 and i < len(units) - 1:
+            i += 1
+            size /= 1024.0
+        return f"{size:.2f} {units[i]}"
+    except: return "N/A"
 
-     details = {
-       'id': user.id, 'is_bot': False, 'user_id': user_id,
-       'name': user.first_name, 'session': msg.text, 'username': user.username
-     }
-     await db.add_bot(details)
-     await msg.reply_text("Session added. ✓")
-
-@Client.on_message(filters.private & filters.command('reset'))
-async def reset_user_settings(bot, m):
-    """Resets a user's settings to default."""
-    default = await db.get_configs("01")
-    await db.update_configs(m.from_user.id, default)
-    await m.reply("Settings have been reset. ✓")
-
-@Client.on_message(filters.command('resetall') & filters.user(Config.OWNER_ID))
-async def reset_all_users_settings(bot, message):
-    """(Owner only) Resets specific settings for all users."""
-    users = await db.get_all_users()
-    sts = await message.reply("Processing...")
-    TEXT = "Total: {}\nSuccess: {}\nFailed: {}"
-    total = success = failed = 0
-    ERRORS = []
-    async for user in users:
-        user_id = user['id']
-        default = await get_configs(user_id)
-        default['db_uri'] = None
-        total += 1
-        if total % 10 == 0:
-           await sts.edit(TEXT.format(total, success, failed))
-        try: 
-           await db.update_configs(user_id, default)
-           success += 1
-        except Exception as e:
-           ERRORS.append(e)
-           failed += 1
-    if ERRORS:
-       await message.reply(ERRORS[:100])
-    await sts.edit("Completed\n" + TEXT.format(total, success, failed))
-  
-async def get_configs(user_id):
-    """Retrieves user configurations from the database."""
-    return await db.get_configs(user_id)
-
-async def update_configs(user_id, key, value):
-    """Updates a specific configuration key for a user."""
-    current = await db.get_configs(user_id)
-    if key in ['caption', 'duplicate', 'db_uri', 'forward_tag', 'protect', 'file_size', 'size_limit', 'extension', 'keywords', 'button', 'forward_delay']:
-       current[key] = value
-    elif key in current.get('filters', {}):
-       current['filters'][key] = value
-    await db.update_configs(user_id, current)
+def retry_btn(id):
+    return InlineKeyboardMarkup([[InlineKeyboardButton('Retry', f"start_public_{id}")]])
 
