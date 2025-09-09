@@ -1,4 +1,4 @@
-# mistaldrin/fwd/fwd-dawn-improve-v2/plugins/test.py
+#1
 import os
 import re 
 import sys
@@ -52,54 +52,11 @@ def parse_buttons(text, markup=True):
     return buttons if buttons else None
 
 async def start_clone_bot(FwdBot, bot_data):
-   """Starts the client and patches the iter_messages method for bot compatibility."""
+   """
+   Starts the client. The complex iterator has been removed in favor of Pyrogram's
+   native get_chat_history, which is handled directly in regix.py for simplicity and reliability.
+   """
    await FwdBot.start()
-   
-   # This is the bot-compatible message iterator from mr-syd.
-   # It is more efficient than get_messages for large ranges.
-   async def iter_messages_fixed(
-      self, 
-      chat_id: Union[int, str],
-      limit: int = 0,
-      offset: int = 0,
-      reverse: bool = False
-      ) -> Optional[AsyncGenerator["types.Message", None]]:
-        
-        total = 0
-        
-        if not reverse:
-            # History is fetched from newest to oldest by default
-            async for message in self.get_chat_history(chat_id, limit=0 if limit == 0 else (limit + offset)):
-                if total < offset:
-                    total += 1
-                    continue
-                yield message
-                total += 1
-                if limit != 0 and total >= (limit + offset):
-                    break
-        else:
-            # To get messages from oldest to newest, we need to get the count first
-            count = await self.get_chat_history_count(chat_id)
-            
-            # Start from the calculated offset from the end
-            for i in range(count - offset, 0, -100):
-                if temp.CANCEL.get(self.me.id): # A way to cancel long fetches
-                    break
-                
-                messages = await self.get_messages(chat_id, list(range(max(1, i - 99), i + 1)))
-                
-                for message in sorted(messages, key=lambda x: x.id):
-                    yield message
-                    total += 1
-                    if limit != 0 and total >= limit:
-                        return # Exit the generator
-                
-                if limit != 0 and total >= limit:
-                    break
-   
-   if bot_data.get('is_bot', False):
-       FwdBot.iter_messages = iter_messages_fixed.__get__(FwdBot, Client)
-   
    return FwdBot
 
 class CLIENT: 
@@ -121,7 +78,7 @@ class CLIENT:
   async def add_bot(self, bot, query: Union[Message, CallbackQuery]):
      """Handles the conversation flow for adding a new bot."""
      user_id = query.from_user.id
-     msg = query # We no longer use bot.ask, we process the message directly
+     msg = query
      
      bot_token_match = re.search(r'(\d{8,10}:[a-zA-Z0-9_-]{35})', msg.text)
      bot_token = bot_token_match.group(1) if bot_token_match else None
@@ -169,3 +126,49 @@ class CLIENT:
      }
      await db.add_bot(details)
      await msg.reply_text("Session added. ✓")
+
+@Client.on_message(filters.private & filters.command('reset'))
+async def reset_user_settings(bot, m):
+    """Resets a user's settings to default."""
+    default = await db.get_configs("01")
+    await db.update_configs(m.from_user.id, default)
+    await m.reply("Settings have been reset. ✓")
+
+@Client.on_message(filters.command('resetall') & filters.user(Config.OWNER_ID))
+async def reset_all_users_settings(bot, message):
+    """(Owner only) Resets specific settings for all users."""
+    users = await db.get_all_users()
+    sts = await message.reply("Processing...")
+    TEXT = "Total: {}\nSuccess: {}\nFailed: {}"
+    total = success = failed = 0
+    ERRORS = []
+    async for user in users:
+        user_id = user['id']
+        default = await get_configs(user_id)
+        default['db_uri'] = None
+        total += 1
+        if total % 10 == 0:
+           await sts.edit(TEXT.format(total, success, failed))
+        try: 
+           await db.update_configs(user_id, default)
+           success += 1
+        except Exception as e:
+           ERRORS.append(e)
+           failed += 1
+    if ERRORS:
+       await message.reply(ERRORS[:100])
+    await sts.edit("Completed\n" + TEXT.format(total, success, failed))
+  
+async def get_configs(user_id):
+    """Retrieves user configurations from the database."""
+    return await db.get_configs(user_id)
+
+async def update_configs(user_id, key, value):
+    """Updates a specific configuration key for a user."""
+    current = await db.get_configs(user_id)
+    if key in ['caption', 'duplicate', 'db_uri', 'forward_tag', 'protect', 'file_size', 'size_limit', 'extension', 'keywords', 'button', 'forward_delay']:
+       current[key] = value
+    elif key in current.get('filters', {}):
+       current['filters'][key] = value
+    await db.update_configs(user_id, current)
+
