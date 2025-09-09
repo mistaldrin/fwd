@@ -56,6 +56,7 @@ async def start_clone_bot(FwdBot, bot_data):
    await FwdBot.start()
    
    # This is the bot-compatible message iterator from the reference repo.
+   # The first argument 'self' will be the client instance, passed explicitly during the call.
    async def iter_messages_fixed(
       self, 
       chat_id: Union[int, str], 
