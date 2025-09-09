@@ -1,3 +1,4 @@
+# mistaldrin/fwd/fwd-dawn-improve-v2/plugins/regix.py
 import re
 import asyncio
 import logging
@@ -17,7 +18,38 @@ CLIENT = CLIENT()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-CONCURRENCY_LIMIT = 4 # Number of concurrent tasks
+CONCURRENCY_LIMIT = 5 # Number of concurrent tasks
+
+# --- Asynchronous Message Generator ---
+async def message_generator(client, chat_id, start_id, end_id, is_bot):
+    """
+    Yields messages from a specific range, handling both bot and userbot clients.
+    """
+    current_id = min(start_id, end_id)
+    target_id = max(start_id, end_id)
+
+    if is_bot:
+        # Bots can fetch specific message ID ranges in chunks
+        while current_id <= target_id:
+            chunk_size = min(100, target_id - current_id + 1)
+            message_ids = list(range(current_id, current_id + chunk_size))
+            if not message_ids:
+                break
+            
+            messages = await client.get_messages(chat_id, message_ids)
+            for message in messages:
+                if message: # Filter out empty messages from get_messages
+                    yield message
+            
+            current_id += chunk_size
+    else:
+        # Userbots should iterate history to be more efficient and avoid bans
+        async for message in client.get_chat_history(chat_id):
+            if message.id > target_id:
+                continue
+            if message.id < current_id:
+                break
+            yield message
 
 # --- Concurrent Worker Function ---
 async def process_message_concurrently(
@@ -26,7 +58,7 @@ async def process_message_concurrently(
     progress_lock, status_message, delay
 ):
     """
-    Processes a single message within a concurrent environment, respecting the forward delay.
+    Processes a single message within a concurrent environment.
     """
     async with semaphore:
         if temp.CANCEL.get(frwd_id):
@@ -36,28 +68,24 @@ async def process_message_concurrently(
 
         if not message or message.empty or message.service:
             sts.add('deleted')
-            await asyncio.sleep(delay) # Sleep even on skipped messages to maintain rhythm
-            return
-
-        # Simple batching for forward_tag mode
-        if forward_tag:
-            sts.add_to_batch(message.id)
         else:
-            new_caption = custom_caption(message, caption)
-            details = {
-                "msg_id": message.id, "media": media(message), "caption": new_caption,
-                'button': button, "protect": protect,
-                "text": message.text.html if message.text else None
-            }
-            await copy(client, details, status_message, sts)
-            sts.add('total_files')
+            if forward_tag:
+                sts.add_to_batch(message.id)
+            else:
+                new_caption = custom_caption(message, caption)
+                details = {
+                    "msg_id": message.id, "media": media(message), "caption": new_caption,
+                    'button': button, "protect": protect,
+                    "text": message.text.html if message.text else None
+                }
+                await copy(client, details, status_message, sts)
+                sts.add('total_files')
 
-        # Progress update logic (locked to prevent race conditions)
+        # Locked progress update
         async with progress_lock:
-            if sts.get('fetched') % 20 == 0:
+            if sts.get('fetched') % 20 == 0 or sts.get('fetched') == sts.get('total'):
                 await edit_progress(status_message, sts, "running")
         
-        # Respect the user-defined delay after processing each message
         await asyncio.sleep(delay)
 
 
@@ -81,7 +109,6 @@ async def pub_(bot, cb):
     if not _bot:
         return await msg_edit(m, "You haven't added a bot/userbot. Please do so in /settings.", wait=True)
 
-    # Get the user-defined delay
     delay = data_params.get('forward_delay', 0.5)
 
     await msg_edit(m, "Starting client...")
@@ -109,37 +136,29 @@ async def pub_(bot, cb):
     temp.forwardings += 1
 
     try:
-        messages_to_process = []
-        await edit_progress(m, sts, "fetching")
-
-        if _bot.get('is_bot', False):
-             async for message in client.iter_messages(chat_id=i.FROM, limit=i.end_id, offset=i.start_id):
-                 if message: messages_to_process.append(message)
-        else:
-             async for message in client.get_chat_history(chat_id=i.FROM):
-                 if message.id > max(i.start_id, i.end_id): continue
-                 if message.id < min(i.start_id, i.end_id): break
-                 if message: messages_to_process.append(message)
-
-        if i.start_id < i.end_id:
-            messages_to_process.reverse()
-
+        await edit_progress(m, sts, "running")
+        
         semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
         progress_lock = asyncio.Lock()
         tasks = []
 
-        for message in messages_to_process:
+        # Use the message generator
+        is_bot_client = _bot.get('is_bot', False)
+        message_gen = message_generator(client, i.FROM, i.start_id, i.end_id, is_bot_client)
+
+        async for message in message_gen:
             if temp.CANCEL.get(frwd_id):
                 break
             task = asyncio.create_task(
                 process_message_concurrently(
                     client, message, sts, caption, forward_tag,
                     protect, button, semaphore, frwd_id,
-                    progress_lock, m, delay # Pass the delay to the worker
+                    progress_lock, m, delay
                 )
             )
             tasks.append(task)
-
+        
+        # Wait for all concurrent tasks to complete
         await asyncio.gather(*tasks)
 
         # Forward any remaining messages in the batch
@@ -203,7 +222,7 @@ async def copy(bot, msg, m, sts):
             sts.add('deleted')
     except FloodWait as e:
         await edit_progress(m, sts, f"floodwait ({e.value}s)")
-        await asyncio.sleep(e.value)
+        await asyncio.sleep(e.value + 2) # Add buffer
         await copy(bot, msg, m, sts) # Retry
     except Exception as e:
         logger.warning(f"Failed to copy message {msg.get('msg_id')}: {e}")
@@ -216,7 +235,7 @@ async def forward(bot, msg_ids, m, sts, protect):
             protect_content=protect, message_ids=msg_ids)
     except FloodWait as e:
         await edit_progress(m, sts, f"floodwait ({e.value}s)")
-        await asyncio.sleep(e.value)
+        await asyncio.sleep(e.value + 2) # Add buffer
         await forward(bot, msg_ids, m, sts, protect) # Retry
 
 async def msg_edit(msg, text, button=None, wait=None):
@@ -317,7 +336,7 @@ def get_size(size):
     except: return "N/A"
 
 def media(msg):
-    if msg and msg.media and hasattr(msg, 'media') and hasattr(msg.media, 'value'):
+    if msg and msg.media and hasattr(msg, 'media') and hasattr(msg, 'media', 'value'):
         media_obj = getattr(msg, msg.media.value, None)
         if media_obj:
             return getattr(media_obj, 'file_id', None)
