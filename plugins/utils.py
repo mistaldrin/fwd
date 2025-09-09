@@ -49,7 +49,8 @@ class STS:
             "FROM": From, 'TO': to, 'total_files': 0,
             'start_id': start_id, 'end_id': end_id,
             'fetched': 0, 'filtered': 0, 'deleted': 0,
-            'duplicate': 0, 'total': abs(end_id - start_id) + 1, 'start': tm.time()
+            'duplicate': 0, 'total': abs(end_id - start_id) + 1, 'start': tm.time(),
+            'status': 'initializing' # Add a default status
         }
         self.get(full=True)
         return STS(self.id)
@@ -63,6 +64,10 @@ class STS:
             setattr(self, k, v)
         return self
     
+    def set(self, key, value):
+        if self.id in self.data:
+            self.data[self.id][key] = value
+
     def get_readable_time(self, seconds: int) -> str:
         return get_readable_time(seconds)
 
