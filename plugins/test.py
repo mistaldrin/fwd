@@ -1,4 +1,3 @@
-#1
 import os
 import re 
 import sys
@@ -56,8 +55,8 @@ async def start_clone_bot(FwdBot, bot_data):
    """Starts the client and patches the iter_messages method for bot compatibility."""
    await FwdBot.start()
    
-   # This is the bot-compatible message iterator from the reference repo.
-   # The first argument 'self' will be the client instance, passed implicitly by __get__.
+   # This is the bot-compatible message iterator.
+   # 'self' will be the client instance, passed implicitly by __get__.
    async def iter_messages_fixed(
       self, 
       chat_id: Union[int, str], 
