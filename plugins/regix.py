@@ -26,33 +26,39 @@ async def message_generator(client, chat_id, start_id, end_id, is_bot, order_asc
     Yields messages from a specific range, handling both bot and userbot clients and order.
     """
     if is_bot:
-        # Bots can fetch specific message ID ranges in chunks
         message_ids = list(range(start_id, end_id + 1))
-        if not order_asc:
-            message_ids.reverse()
+        if not order_asc: message_ids.reverse()
         
         for i in range(0, len(message_ids), 100):
             chunk = message_ids[i:i+100]
-            if not chunk:
-                break
+            if not chunk: break
             
             messages = await client.get_messages(chat_id, chunk)
             for message in messages:
-                if message:
-                    yield message
+                if message: yield message
     else:
-        # Userbots iterate history. Pyrogram handles ordering internally.
         async for message in client.get_chat_history(chat_id):
             if message.id > max(start_id, end_id): continue
             if message.id < min(start_id, end_id): break
             yield message
 
+# --- Dedicated Progress Updater ---
+async def progress_updater(status_message, sts, all_tasks):
+    """
+    Updates the progress message at regular intervals.
+    """
+    while not all(t.done() for t in all_tasks):
+        try:
+            await edit_progress(status_message, sts, sts.get('status'))
+        except Exception as e:
+            logger.warning(f"Progress updater error: {e}")
+        await asyncio.sleep(10) # Update every 10 seconds
+
 
 # --- Concurrent Worker Function ---
 async def process_message_concurrently(
     client, message, sts, caption, forward_tag,
-    protect, button, semaphore, frwd_id,
-    progress_lock, status_message, delay
+    protect, button, semaphore, frwd_id, delay
 ):
     """
     Processes a single message within a concurrent environment.
@@ -68,38 +74,27 @@ async def process_message_concurrently(
         else:
             try:
                 if forward_tag:
-                    # Batch forwarding is handled outside this worker
                     sts.add_to_batch(message.id)
-                    sts.add('total_files') # Assume success for batching
+                    sts.add('total_files')
                 else:
                     new_caption = custom_caption(message, caption)
-                    # Direct copy_message call for robustness
                     await client.copy_message(
-                        chat_id=sts.get('TO'),
-                        from_chat_id=sts.get('FROM'),
-                        message_id=message.id,
-                        caption=new_caption,
-                        reply_markup=button,
-                        protect_content=protect
+                        chat_id=sts.get('TO'), from_chat_id=sts.get('FROM'),
+                        message_id=message.id, caption=new_caption,
+                        reply_markup=button, protect_content=protect
                     )
                     sts.add('total_files')
             except MediaEmpty:
-                sts.add('deleted') # Treat messages with no forwardable content as skipped
+                sts.add('deleted')
             except FloodWait as e:
-                async with progress_lock:
-                    await edit_progress(status_message, sts, f"floodwait ({e.value}s)")
+                sts.set_status(f"floodwait ({e.value}s)")
                 await asyncio.sleep(e.value + 2)
-                # Retry after floodwait
-                await process_message_concurrently(client, message, sts, caption, forward_tag, protect, button, semaphore, frwd_id, progress_lock, status_message, delay)
-                return # Exit current attempt after requeueing
+                sts.set_status("running")
+                await process_message_concurrently(client, message, sts, caption, forward_tag, protect, button, semaphore, frwd_id, delay)
+                return
             except Exception as e:
                 logger.warning(f"Failed to copy message {message.id} from {sts.get('FROM')}: {e}")
                 sts.add('deleted')
-
-        # Locked progress update
-        async with progress_lock:
-            if sts.get('fetched') % 20 == 0 or sts.get('fetched') == sts.get('total'):
-                await edit_progress(status_message, sts, "running")
         
         await asyncio.sleep(delay)
 
@@ -134,39 +129,38 @@ async def pub_(bot, cb):
 
     await msg_edit(m, "Accessing channels...")
     try:
-        from_chat_details = await client.get_chat(i.FROM)
-        to_chat_details = await client.get_chat(i.TO)
+        from_chat_details, to_chat_details = await client.get_chat(i.FROM), await client.get_chat(i.TO)
         from_title, to_title = from_chat_details.title, to_chat_details.title
     except Exception as e:
-        await msg_edit(m, f"Error accessing source/target chat: {e}\n\nMake sure your bot/userbot has access and is an admin in the target chat.", retry_btn(frwd_id), True)
+        await msg_edit(m, f"Error accessing source/target chat: {e}\n\nMake sure your bot/userbot has access.", retry_btn(frwd_id), True)
         return await stop(client, user_id, frwd_id, m)
 
-    if user_id not in temp.ACTIVE_TASKS:
-        temp.ACTIVE_TASKS[user_id] = {}
+    if user_id not in temp.ACTIVE_TASKS: temp.ACTIVE_TASKS[user_id] = {}
     temp.ACTIVE_TASKS[user_id][frwd_id] = { "process": m, "details": {"type": "Forwarding", "from": from_title, "to": to_title} }
     temp.lock[user_id] = True
     temp.forwardings += 1
 
+    updater_task = None
     try:
         await edit_progress(m, sts, "running")
         
         semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
-        progress_lock = asyncio.Lock()
         tasks = []
-
+        
         is_bot_client = _bot.get('is_bot', False)
-        # Assuming the range selection logic correctly sets start_id and end_id based on user's chronological choice
         order_asc = i.start_id < i.end_id
         message_gen = message_generator(client, i.FROM, min(i.start_id, i.end_id), max(i.start_id, i.end_id), is_bot_client, order_asc)
 
         async for message in message_gen:
             if temp.CANCEL.get(frwd_id): break
-            task = asyncio.create_task(process_message_concurrently(client, message, sts, caption, forward_tag, protect, button, semaphore, frwd_id, progress_lock, m, delay))
+            task = asyncio.create_task(process_message_concurrently(client, message, sts, caption, forward_tag, protect, button, semaphore, frwd_id, delay))
             tasks.append(task)
         
+        # Start the dedicated progress updater
+        updater_task = asyncio.create_task(progress_updater(m, sts, tasks))
+
         await asyncio.gather(*tasks)
 
-        # Handle batched forwarding for forward_tag mode
         if forward_tag and sts.get_batch():
             for i in range(0, len(sts.get_batch()), 100):
                 chunk = sts.get_batch()[i:i+100]
@@ -179,6 +173,8 @@ async def pub_(bot, cb):
         logger.error(f"Forwarding error: {e}", exc_info=True)
         await msg_edit(m, f'<b>An error occurred:</b>\n<code>{e}</code>', wait=True)
     finally:
+        if updater_task and not updater_task.done():
+            updater_task.cancel()
         await stop(client, user_id, frwd_id, m)
 
 
@@ -190,7 +186,7 @@ async def get_frwd_status(bot, query):
     if not sts.verify(): return await query.answer("This task has completed or been cancelled.", show_alert=True)
 
     i = sts.get(full=True)
-    now, diff = time.time(), time.time() - i.start
+    diff = time.time() - i.start
     if diff == 0: diff = 1
 
     speed = i.fetched / diff
@@ -212,9 +208,9 @@ async def forward(bot, msg_ids, m, sts, protect):
     try:
         await bot.forward_messages(chat_id=sts.get('TO'), from_chat_id=sts.get('FROM'), protect_content=protect, message_ids=msg_ids)
     except FloodWait as e:
-        async with asyncio.Lock(): # Assuming progress_lock is not available here
-            await edit_progress(m, sts, f"floodwait ({e.value}s)")
+        sts.set_status(f"floodwait ({e.value}s)")
         await asyncio.sleep(e.value + 2)
+        sts.set_status("running")
         await forward(bot, msg_ids, m, sts, protect) # Retry
 
 async def msg_edit(msg, text, button=None, wait=None):
@@ -236,11 +232,10 @@ async def edit_progress(msg, sts, status):
 
     button = None
     if status not in ["cancelled", "completed"]:
-        now, diff = time.time(), time.time() - i.start
+        diff = time.time() - i.start
         if diff == 0: diff = 1
 
-        speed = i.fetched / diff
-        eta = sts.get_readable_time(int((i.total - i.fetched) / speed if speed > 0 else 0))
+        eta = sts.get_readable_time(int((i.total - i.fetched) / (i.fetched / diff) if (i.fetched / diff) > 0 else 0))
         percentage = "{:.2f}".format(i.fetched * 100 / i.total if i.total > 0 else 0.00)
         progress_bar = "▰{0}▱{1}".format('▰' * math.floor(float(percentage) / 10), '▱' * (10 - math.floor(float(percentage) / 10)))
 
@@ -271,7 +266,7 @@ def custom_caption(msg, caption):
     if not msg: return ""
     fcaption = (msg.caption or "").html if msg.caption else ""
     if not caption: return fcaption
-
+    
     file_name, file_size = "", "0 B"
     if msg.media:
         media = getattr(msg, msg.media.value, None)
