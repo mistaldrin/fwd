@@ -69,15 +69,14 @@ async def pub_(bot, cb):
     last_edit_time = time.time()
 
     try:
-        # The main work starts here, so we show the progress message now.
-        await edit_progress(m, sts, "running")
-        
         messages_to_process = []
         
+        # Display the initial progress message right away
+        await edit_progress(m, sts, "Fetching...")
+
         if _bot.get('is_bot', False):
             start_point = min(i.start_id, i.end_id)
             end_point = max(i.start_id, i.end_id)
-            # The call is now corrected and matches the function definition.
             async for message in client.iter_messages(chat_id=i.FROM, limit=end_point, offset=start_point):
                  if message: messages_to_process.append(message)
         else:
@@ -90,6 +89,8 @@ async def pub_(bot, cb):
 
         if i.start_id < i.end_id:
             messages_to_process.reverse()
+        
+        await edit_progress(m, sts, "running")
 
         MSG_batch = []
         
