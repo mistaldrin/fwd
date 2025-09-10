@@ -64,24 +64,23 @@ async def pub_(bot, cb):
         
         order_asc = i.start_id < i.end_id
         
-        # This is the new, robust message iterator from test.py
+        # Use the robust iterator patched in test.py for bots, or native for userbots
         message_iterator = client.iter_messages(
             chat_id=i.FROM,
-            reverse=order_asc # Pyrogram's reverse=True means oldest to newest
-        )
+            reverse=order_asc # True means oldest to newest
+        ) if _bot.get('is_bot', False) else client.get_chat_history(i.FROM)
 
         async for message in message_iterator:
             if temp.CANCEL.get(frwd_id):
                 final_status = "cancelled"
                 break
             
-            # Filter based on message ID range
+            # This filter is crucial because the iterator might not be exact
             if not (min(i.start_id, i.end_id) <= message.id <= max(i.start_id, i.end_id)):
                 continue
 
             sts.add('fetched')
             
-            # Update progress message every 20 messages
             if sts.get('fetched') % 20 == 0:
                 await edit_progress(m, sts, "running")
 
@@ -89,7 +88,6 @@ async def pub_(bot, cb):
                 sts.add('deleted')
                 continue
 
-            # This is the core fault-tolerance loop
             try:
                 if forward_tag:
                     await message.forward(chat_id=i.TO, protect_content=protect)
@@ -107,12 +105,10 @@ async def pub_(bot, cb):
                 await edit_progress(m, sts, sts.get('status'))
                 await asyncio.sleep(e.value + 2)
                 sts.set_status("running")
-                # Retry the same message
                 try:
-                    if forward_tag:
-                        await message.forward(chat_id=i.TO, protect_content=protect)
-                    else:
-                        await message.copy(chat_id=i.TO, caption=new_caption, reply_markup=button, protect_content=protect)
+                    # Retry logic
+                    if forward_tag: await message.forward(chat_id=i.TO, protect_content=protect)
+                    else: await message.copy(chat_id=i.TO, caption=new_caption, reply_markup=button, protect_content=protect)
                     sts.add('total_files')
                 except Exception as e_retry:
                     logger.error(f"Retry failed for message {message.id}: {e_retry}")
@@ -211,7 +207,6 @@ async def stop(client, user_id, task_id, message_obj):
 def custom_caption(msg, caption):
     if not msg: return ""
     
-    # Prioritize message text for text-only messages, otherwise use caption
     fcaption_text = ""
     if msg.text:
         fcaption_text = msg.text.html
