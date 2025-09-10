@@ -9,6 +9,8 @@ from database import db
 from config import temp
 from translation import Translation
 from .test import CLIENT
+# --- Import the necessary function from unequify ---
+from .unequify import process_unequify_target
 from pyrogram import Client, filters, enums
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message
 
@@ -165,8 +167,39 @@ async def stateful_message_handler(bot: Client, message: Message):
         temp.USER_STATES.pop(user_id, None)
         await CLIENT().add_session(bot, message)
 
-    elif current_state in ["awaiting_unequify_manual_target", "awaiting_unequify_chat_selection"]:
-        pass
+    # --- FIXED UNEQIFY LOGIC ---
+    elif current_state == "awaiting_unequify_manual_target":
+        prompt_id = state_info.get("prompt_message_id")
+        if prompt_id:
+            try: await bot.delete_messages(user_id, prompt_id)
+            except: pass
+        
+        userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
+        if not userbot_id: return await message.reply("Error: Userbot selection lost. Please start over.")
+        
+        temp.USER_STATES.pop(user_id, None)
+        await process_unequify_target(bot, message, user_id, userbot_id, message.text)
+
+    elif current_state == "awaiting_unequify_chat_selection":
+        prompt_message = state_info.get("prompt_message")
+        if prompt_message:
+            try: await prompt_message.delete()
+            except: pass
+        
+        chats = state_info.get("chats", {})
+        user_input = message.text.strip()
+        selected_chat = chats.get(user_input)
+
+        if not selected_chat:
+            temp.USER_STATES.pop(user_id, None)
+            return await message.reply("Invalid selection. Please start the /unequify process again.")
+        
+        userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
+        if not userbot_id: return await message.reply("Error: Userbot selection lost. Please start over.")
+
+        temp.USER_STATES.pop(user_id, None)
+        await process_unequify_target(bot, message, user_id, userbot_id, selected_chat.id)
+
 
 # --- Callbacks for Interactive Range Selection ---
 @Client.on_callback_query(filters.regex(r"^range_"))
