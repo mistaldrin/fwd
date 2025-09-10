@@ -19,7 +19,7 @@ logger.setLevel(logging.INFO)
 
 # --- Main Task Starter (Simplified, mr-syd Architecture) ---
 @Client.on_callback_query(filters.regex(r'^start_public'))
-async def pub_(bot, cb):
+asyncasync def pub_(bot, cb):
     user_id = cb.from_user.id
     if temp.lock.get(user_id):
         return await cb.answer("Please wait for the previous task to complete!", show_alert=True)
@@ -64,23 +64,24 @@ async def pub_(bot, cb):
         
         order_asc = i.start_id < i.end_id
         
-        # Use the robust iterator patched in test.py for bots, or native for userbots
+        # This is the new, robust message iterator from test.py
         message_iterator = client.iter_messages(
             chat_id=i.FROM,
-            reverse=order_asc # True means oldest to newest
-        ) if _bot.get('is_bot', False) else client.get_chat_history(i.FROM)
+            reverse=order_asc # Pyrogram's reverse=True means oldest to newest
+        )
 
         async for message in message_iterator:
             if temp.CANCEL.get(frwd_id):
                 final_status = "cancelled"
                 break
             
-            # This filter is crucial because the iterator might not be exact
+            # Filter based on message ID range
             if not (min(i.start_id, i.end_id) <= message.id <= max(i.start_id, i.end_id)):
                 continue
 
             sts.add('fetched')
             
+            # Update progress message every 20 messages
             if sts.get('fetched') % 20 == 0:
                 await edit_progress(m, sts, "running")
 
@@ -88,6 +89,7 @@ async def pub_(bot, cb):
                 sts.add('deleted')
                 continue
 
+            # This is the core fault-tolerance loop
             try:
                 if forward_tag:
                     await message.forward(chat_id=i.TO, protect_content=protect)
@@ -105,10 +107,12 @@ async def pub_(bot, cb):
                 await edit_progress(m, sts, sts.get('status'))
                 await asyncio.sleep(e.value + 2)
                 sts.set_status("running")
+                # Retry the same message
                 try:
-                    # Retry logic
-                    if forward_tag: await message.forward(chat_id=i.TO, protect_content=protect)
-                    else: await message.copy(chat_id=i.TO, caption=new_caption, reply_markup=button, protect_content=protect)
+                    if forward_tag:
+                        await message.forward(chat_id=i.TO, protect_content=protect)
+                    else:
+                        await message.copy(chat_id=i.TO, caption=new_caption, reply_markup=button, protect_content=protect)
                     sts.add('total_files')
                 except Exception as e_retry:
                     logger.error(f"Retry failed for message {message.id}: {e_retry}")
