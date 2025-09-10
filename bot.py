@@ -33,6 +33,7 @@ class Bot(Client):
             plugins={
                 "root": "plugins"
             },
+            # workers=50, # This has been removed to disable the unstable worker-based forwarding.
             bot_token=Config.BOT_TOKEN
         )
         self.log = logging
