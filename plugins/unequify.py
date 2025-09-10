@@ -146,6 +146,42 @@ async def unequify_continue(bot: Client, message: Message):
 @Client.on_callback_query(filters.regex("^uneq_"))
 async def unequify_callbacks(bot: Client, query: CallbackQuery):
     user_id = query.from_user.id
+
+    # --- FIX: Handle status button clicks directly ---
+    if query.data.startswith("uneq_status_"):
+        task_id = query.data.split("_", 2)[2]
+        task_data = temp.ACTIVE_TASKS.get(query.from_user.id, {}).get(task_id)
+        if not task_data:
+            return await query.answer("This task has completed or been cancelled.", show_alert=True)
+        
+        stats = task_data.get("stats", {})
+        scanned = stats.get("scanned", 0)
+        total = stats.get("total", 0)
+        deleted = stats.get("deleted", 0)
+        start_time = stats.get("start_time", 0)
+        status = stats.get("status", "running")
+        
+        diff = time.time() - start_time
+        if diff == 0:
+            diff = 1
+        
+        speed = scanned / diff
+        eta = get_readable_time(int((total - scanned) / speed if speed > 0 else 0))
+        percentage = "{:.2f}".format(scanned * 100 / total if total > 0 else 0.00)
+
+        await query.answer(
+            Translation.UNEQUIFY_STATUS_ALERT.format(
+                status=status,
+                scanned=scanned,
+                total=total,
+                deleted=deleted,
+                percentage=percentage,
+                eta=eta
+            ),
+            show_alert=True
+        )
+        return
+
     data = query.data.split("_", 1)[1]
     
     # Acknowledge the callback immediately
@@ -220,30 +256,10 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
         _, selection_state, session_id = data.split("_", 2)
         await start_deduplication(bot, query, selection_state, session_id)
 
-@Client.on_callback_query(filters.regex(r'^uneq_status_'))
-async def get_uneq_status(bot, query):
-    task_id = query.data.split("_", 2)[2]
-    task_data = temp.ACTIVE_TASKS.get(query.from_user.id, {}).get(task_id)
-    if not task_data: return await query.answer("This task has completed or been cancelled.", show_alert=True)
-    
-    stats = task_data.get("stats", {})
-    scanned, total, deleted = stats.get("scanned", 0), stats.get("total", 0), stats.get("deleted", 0)
-    start_time, status = stats.get("start_time", 0), stats.get("status", "running")
-    
-    now, diff = time.time(), time.time() - start_time
-    if diff == 0: diff = 1
-    
-    speed = scanned / diff
-    eta = get_readable_time(int((total - scanned) / speed if speed > 0 else 0))
-    percentage = "{:.2f}".format(scanned * 100 / total if total > 0 else 0.00)
-
-    await query.answer(
-        Translation.UNEQUIFY_STATUS_ALERT.format(
-            status=status, scanned=scanned, total=total, deleted=deleted,
-            remaining=(total - scanned), percentage=percentage, eta=eta
-        ),
-        show_alert=True
-    )
+# This function is now removed as its logic is merged into unequify_callbacks
+# @Client.on_callback_query(filters.regex(r'^uneq_status_'))
+# async def get_uneq_status(bot, query):
+#    ...
 
 async def start_deduplication(bot: Client, callback_query: CallbackQuery, selection_state: str, session_id: str):
     user_id = callback_query.from_user.id
