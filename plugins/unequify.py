@@ -5,6 +5,7 @@ import io
 import random
 import time
 import math
+import logging
 from uuid import uuid4
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -16,6 +17,8 @@ from .utils import start_range_selection, get_readable_time
 from translation import Translation
 from config import temp
 from database import db
+
+logger = logging.getLogger(__name__)
 
 # --- Constants for the interactive menu ---
 OPTION_LABELS = ["Text", "Photos/Videos", "Audio", "Documents", "Stickers"]
@@ -148,9 +151,14 @@ async def unequify_callbacks(bot: Client, query: CallbackQuery):
     # Acknowledge the callback immediately
     await query.answer()
 
-    if not (data.startswith("status_") or data.startswith("toggle_")):
+    # --- MODIFIED DELETION LOGIC ---
+    # Only delete the message if it's NOT a startscan, status, or toggle action
+    if not (data.startswith("status_") or data.startswith("toggle_") or data.startswith("startscan_")):
         if query.message:
-            await query.message.delete()
+            try:
+                await query.message.delete()
+            except Exception:
+                pass # Ignore if already deleted
 
     if data == "manual":
         prompt_message = await bot.send_message(user_id, "Send the channel username or ID.")
@@ -239,20 +247,30 @@ async def get_uneq_status(bot, query):
 
 async def start_deduplication(bot: Client, callback_query: CallbackQuery, selection_state: str, session_id: str):
     user_id = callback_query.from_user.id
+    
+    # --- FIXED MESSAGE LIFECYCLE LOGIC ---
+    # 1. Delete the old message (the type selection menu)
+    try:
+        await callback_query.message.delete()
+    except Exception as e:
+        logger.warning(f"Could not delete message during unequify start: {e}")
+
+    # 2. Send a brand new message to act as the progress display
+    status_message = await bot.send_message(user_id, "`🚀 Starting deduplication process...`")
+    # ------------------------------------
+
     task_id = str(uuid4())
     
     range_session = temp.RANGE_SESSIONS.pop(session_id, None)
-    if not range_session: return await bot.send_message(user_id, "Error: Session expired or invalid.")
+    if not range_session: return await status_message.edit("Error: Session expired or invalid.")
 
     userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
-    if not userbot_id: return await bot.send_message(user_id, "Error: Bot selection lost.")
+    if not userbot_id: return await status_message.edit("Error: Bot selection lost.")
 
     userbot_config = await db.get_bot(user_id, userbot_id)
-    if not userbot_config: return await bot.send_message(user_id, "Error: Userbot not found.")
+    if not userbot_config: return await status_message.edit("Error: Userbot not found.")
 
     target_channel, start_id, end_id = range_session['from_chat_id'], min(range_session['start_id'], range_session['end_id']), max(range_session['start_id'], range_session['end_id'])
-    
-    status_message = callback_query.message
     
     if user_id not in temp.ACTIVE_TASKS: temp.ACTIVE_TASKS[user_id] = {}
     temp.ACTIVE_TASKS[user_id][task_id] = { "process": status_message, "details": {"type": "Deduplication", "from": range_session['from_title'], "to": "N/A"}, "stats": {} }
