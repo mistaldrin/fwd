@@ -23,7 +23,14 @@ class temp(object):
     forwardings = 0
     BANNED_USERS = []
     IS_FRWD_CHAT = []
-    
+    # Dictionaries for managing interactive sessions
+    RANGE_SESSIONS = {}
+    USER_STATES = {} # For stateful conversations
+    # For tracking active tasks
+    ACTIVE_TASKS = {} # {user_id: {task_id: {"process": message_obj, "details": {}}}}
+    # User-specific bot selections for concurrent operations
+    FORWARD_BOT_ID = {}
+    UNEQUIFY_USERBOT_ID = {}
 
 
 
