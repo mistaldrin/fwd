@@ -59,7 +59,7 @@ async def start_clone_bot(FwdBot, bot_data):
    await FwdBot.start()
    return FwdBot
 
-class CLIENT: 
+classclass CLIENT: 
   def __init__(self):
      self.api_id = Config.API_ID
      self.api_hash = Config.API_HASH
