@@ -220,12 +220,29 @@ async def edit_progress(msg, sts, status):
         )
         button = InlineKeyboardMarkup([[InlineKeyboardButton(f"📊 Status: {percentage}%", callback_data=f'frwd_status_{i.id}')], [InlineKeyboardButton('❌ Cancel ❌', f'cancel_task_{i.id}')]])
     else:
-        text = f"✅ **Task Completed!**\n\n**Processed:** `{i.fetched}`\n**Forwarded:** `{i.total_files}`\n**Failed:** `{i.failed}`"
-        if status == "cancelled":
-            text = f"❌ **Task Cancelled!**\n\n**Processed:** `{i.fetched}`\n**Forwarded:** `{i.total_files}`\n**Failed:** `{i.failed}`"
-        elif status == "error":
-            text = f"⚠️ **Error!**\n\nAn unexpected error occurred. Check logs.\n**Processed:** `{i.fetched}`"
+        # --- NEW CLASSY FORMATTING FOR FINAL MESSAGE ---
+        end_time = time.time()
+        time_taken = sts.get_readable_time(int(end_time - i.start))
+        total_skipped = i.deleted + i.duplicate + i.filtered
+
+        if status == "completed":
+            title = "✅ **Forwarding Complete**"
+        elif status == "cancelled":
+            title = "❌ **Task Cancelled**"
+        else:  # error
+            title = "⚠️ **An Error Occurred**"
+
+        text = (
+            f"{title}\n\n"
+            f"**Time Taken:** `{time_taken}`\n\n"
+            f"**<u>Statistics</u>**\n"
+            f"  - **Processed:** `{i.fetched}`\n"
+            f"  - **Forwarded:** `{i.total_files}`\n"
+            f"  - **Skipped:** `{total_skipped}`\n"
+            f"  - **Failed:** `{i.failed}`"
+        )
         button = InlineKeyboardMarkup([[InlineKeyboardButton("Done!", callback_data="close_btn")]])
+        # ---------------------------------------------
 
     await msg_edit(msg, text, button)
 
