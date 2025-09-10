@@ -103,28 +103,19 @@ Manual input: `/unequify [channel_username_or_id]`"""
 <b>ETA:</b> <code>{eta}</code>
 """
 
-  STATUS_ALERT = """📊 <b>Real-Time Status</b> 📊
+  # --- Corrected Status Alerts (Concise for Telegram's 200 character popup limit) ---
 
-<b>Status:</b> <code>{status}</code>
-<b>Processed:</b> <code>{fetched} of {total}</code>
-<b>Forwarded:</b> <code>{forwarded}</code>
-<b>Failed:</b> <code>{failed}</code>
-<b>Remaining:</b> <code>{remaining}</code>
-<b>Skipped:</b> <code>{skipped}</code>
-<b>Progress:</b> <code>{percentage}%</code>
-<b>ETA:</b> <code>{eta}</code>
-"""
+  STATUS_ALERT = """Processed: {fetched}/{total} ({percentage}%)
+Forwarded: {forwarded} | Failed: {failed}
+Skipped: {skipped} | Status: {status}
+ETA: {eta}"""
   
-  UNEQUIFY_STATUS_ALERT = """📊 <b>Deduplication Status</b> 📊
-
-<b>Status:</b> <code>{status}</code>
-<b>Scanned:</b> <code>{scanned} of {total}</code>
-<b>Deleted:</b> <code>{deleted}</code>
-<b>Remaining:</b> <code>{remaining}</code>
-<b>Progress:</b> <code>{percentage}%</code>
-<b>ETA:</b> <code>{eta}</code>
-"""
-
+  UNEQUIFY_STATUS_ALERT = """Scanned: {scanned}/{total} ({percentage}%)
+Deleted: {deleted} | Status: {status}
+ETA: {eta}"""
+  
+  # --------------------------------------------------------------------------
+  
   DOUBLE_CHECK = """<b>֎ Final Check ֎</b>
 
 Here's the plan:
@@ -146,3 +137,5 @@ Set a custom delay between forwards. Helps avoid API limits.
 <b>Example:</b> `/forwardelay 0.5`
 
 Default is 0.5 seconds in high-speed mode."""
+
+}
