@@ -59,12 +59,12 @@ async def pub_(bot, cb):
     temp.forwardings += 1
     
     final_status = "error"
-    forward_batch = [] # For batching messages when using forward_tag
+    forward_batch = []
+    last_update_time = time.time() # Initialize timer for dynamic updates
 
     try:
         await edit_progress(m, sts, "running")
-
-        # --- Stable Message Fetching Logic ---
+        
         start, end = (i.start_id, i.end_id) if i.start_id < i.end_id else (i.end_id, i.start_id)
         message_ids = list(range(start, end + 1))
 
@@ -80,12 +80,17 @@ async def pub_(bot, cb):
             except Exception as e_fetch:
                 logger.error(f"Could not fetch message chunk {chunk}: {e_fetch}")
                 sts.add('failed', len(chunk))
-                sts.add('fetched', len(chunk)) # Count as fetched even if failed
+                sts.add('fetched', len(chunk))
                 continue
 
             for message in messages:
-                if sts.get('fetched') % 20 == 0:
+                # --- DYNAMIC UPDATE LOGIC ---
+                elapsed_time = time.time() - i.start
+                update_interval = 5 if elapsed_time < 60 else 15
+                if time.time() - last_update_time > update_interval:
                     await edit_progress(m, sts, "running")
+                    last_update_time = time.time()
+                # --- END DYNAMIC UPDATE LOGIC ---
                 
                 sts.add('fetched')
                 
@@ -103,7 +108,7 @@ async def pub_(bot, cb):
                             )
                             sts.add('total_files', len(forward_batch))
                             forward_batch.clear()
-                            await asyncio.sleep(max(delay, 2)) # Higher delay for batches
+                            await asyncio.sleep(max(delay, 2))
                     else:
                         new_caption = custom_caption(message, caption)
                         await message.copy(
@@ -117,7 +122,6 @@ async def pub_(bot, cb):
                     await asyncio.sleep(e.value + 2)
                     sts.set_status("running")
                     try:
-                        # Retry logic
                         if forward_tag: 
                             sts.add('failed', len(forward_batch))
                             forward_batch.clear()
@@ -166,10 +170,11 @@ async def get_frwd_status(bot, query):
     eta = sts.get_readable_time(int((i.total - i.fetched) / speed if speed > 0 else 0))
     percentage = "{:.2f}".format(i.fetched * 100 / i.total if i.total > 0 else 0.00)
 
+    # Using the concise status alert for the popup
     await query.answer(
         Translation.STATUS_ALERT.format(
             status=i.status, fetched=i.fetched, total=i.total, forwarded=i.total_files,
-            failed=i.failed, remaining=(i.total - i.fetched), skipped=i.deleted + i.filtered,
+            failed=i.failed, remaining=(i.total - i.fetched), skipped=i.deleted + i.duplicate,
             percentage=percentage, eta=eta
         ),
         show_alert=True
