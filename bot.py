@@ -33,7 +33,6 @@ class Bot(Client):
             plugins={
                 "root": "plugins"
             },
-            workers=50,
             bot_token=Config.BOT_TOKEN
         )
         self.log = logging
