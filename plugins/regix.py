@@ -226,20 +226,24 @@ async def edit_progress(msg, sts, status):
         total_skipped = i.deleted + i.duplicate + i.filtered
 
         if status == "completed":
-            title = "✅ **Forwarding Complete**"
+            title = "✅ <b>Forwarding Complete</b>"
+            line = "━━━━━━━━━━━━━━━━━━━━"
         elif status == "cancelled":
-            title = "❌ **Task Cancelled**"
+            title = "❌ <b>Task Cancelled</b>"
+            line = "━━━━━━━━━━━━━━━━━━━━"
         else:  # error
-            title = "⚠️ **An Error Occurred**"
+            title = "⚠️ <b>An Error Occurred</b>"
+            line = "━━━━━━━━━━━━━━━━━━━━"
 
         text = (
-            f"{title}\n\n"
-            f"**Time Taken:** `{time_taken}`\n\n"
-            f"**<u>Statistics</u>**\n"
-            f"  - **Processed:** `{i.fetched}`\n"
-            f"  - **Forwarded:** `{i.total_files}`\n"
-            f"  - **Skipped:** `{total_skipped}`\n"
-            f"  - **Failed:** `{i.failed}`"
+            f"{title}\n"
+            f"{line}\n"
+            f"<b>Time Taken:</b> <code>{time_taken}</code>\n\n"
+            f"<b><u>Statistics</u></b>:\n"
+            f"  Processed: <code>{i.fetched}</code>\n"
+            f"  Forwarded: <code>{i.total_files}</code>\n"
+            f"  Skipped:   <code>{total_skipped}</code>\n"
+            f"  Failed:    <code>{i.failed}</code>"
         )
         button = InlineKeyboardMarkup([[InlineKeyboardButton("Done!", callback_data="close_btn")]])
         # ---------------------------------------------
