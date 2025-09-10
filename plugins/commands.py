@@ -164,38 +164,24 @@ async def list_userbot_chats(bot: Client, message: Message, user_id: int, userbo
 # --- New /tasks command and callbacks ---
 @Client.on_message(filters.private & filters.command("tasks"))
 async def active_tasks_command(bot, message):
-    user_id = message.from_user.id
-    tasks = temp.ACTIVE_TASKS.get(user_id, {})
-    
-    if not tasks:
-        return await message.reply_text("You have no active tasks.")
-        
-    text = "<b>Your Active Tasks:</b>\n\n"
-    buttons = []
-    for task_id, task_data in tasks.items():
-        details = task_data.get("details", {})
-        task_type = details.get("type", "Unknown Task")
-        from_chat = details.get("from", "N/A")
-        to_chat = details.get("to", "N/A")
-        
-        text += f"<b>Task ID:</b> <code>{task_id[:8]}...</code>\n"
-        text += f"  - <b>Type:</b> {task_type}\n"
-        text += f"  - <b>From:</b> {from_chat}\n"
-        if to_chat != "N/A":
-            text += f"  - <b>To:</b> {to_chat}\n"
-        
-        buttons.append([InlineKeyboardButton(f"❌ Cancel Task: {task_id[:8]}...", callback_data=f"cancel_task_{task_id}")])
-
-    await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    await active_tasks_cb(bot, message)
 
 @Client.on_callback_query(filters.regex(r'^active_tasks_cmd'))
-async def active_tasks_cb(bot, query):
-    user_id = query.from_user.id
+async def active_tasks_cb(bot, query_or_message):
+    is_message = isinstance(query_or_message, Message)
+    user_id = query_or_message.from_user.id
+    message = query_or_message if is_message else query_or_message.message
+    
     tasks = temp.ACTIVE_TASKS.get(user_id, {})
     
     if not tasks:
-        return await query.message.edit_text("You have no active tasks.", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('« Back', callback_data='help')]]))
-        
+        text = "You have no active tasks."
+        markup = InlineKeyboardMarkup([[InlineKeyboardButton('« Back', callback_data='help')]]) if not is_message else None
+        if is_message:
+            return await message.reply_text(text)
+        else:
+            return await message.edit_text(text, reply_markup=markup)
+
     text = "<b>Your Active Tasks:</b>\n\n"
     buttons = []
     for task_id, task_data in tasks.items():
@@ -212,21 +198,52 @@ async def active_tasks_cb(bot, query):
         
         buttons.append([InlineKeyboardButton(f"❌ Cancel Task: {task_id[:8]}...", callback_data=f"cancel_task_{task_id}")])
     
-    buttons.append([InlineKeyboardButton('« Back', callback_data='help')])
-    await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    if not is_message:
+        buttons.append([InlineKeyboardButton('« Back', callback_data='help')])
+    
+    if is_message:
+        await message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+    else:
+        await message.edit_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+
+
+# --- New Cancellation Workflow ---
 
 @Client.on_callback_query(filters.regex(r'^cancel_task_'))
-async def cancel_task_cb(bot, query):
+async def cancel_task_confirmation_cb(bot, query):
+    """Asks the user to confirm the cancellation."""
     user_id = query.from_user.id
     task_id = query.data.split("_", 2)[2]
     
+    if not temp.ACTIVE_TASKS.get(user_id, {}).get(task_id):
+        await query.answer("This task is no longer active.", show_alert=True)
+        return await active_tasks_cb(bot, query)
+
+    await query.message.edit_text(
+        f"<b>Are you sure you want to cancel this task?</b>\n\nTask ID: <code>{task_id[:8]}...</code>",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("✓ Yes, cancel it", callback_data=f"confirm_cancel_{task_id}")],
+            [InlineKeyboardButton("« No, go back", callback_data="active_tasks_cmd")]
+        ])
+    )
+
+@Client.on_callback_query(filters.regex(r'^confirm_cancel_'))
+async def confirm_cancel_task_cb(bot, query):
+    """Sets the cancellation flag and provides immediate feedback."""
+    user_id = query.from_user.id
+    task_id = query.data.split("_", 2)[2]
+
     if temp.ACTIVE_TASKS.get(user_id, {}).get(task_id):
         temp.CANCEL[task_id] = True
-        await query.answer("Cancellation signal sent. The task will stop shortly.", show_alert=True)
-        await query.message.delete()
+        await query.message.edit_text(
+            f"✅ **Cancellation signal sent for task <code>{task_id[:8]}...</code>**\n\nThe process will stop shortly."
+        )
     else:
-        await query.answer("This task is no longer active or may have already completed.", show_alert=True)
-        await active_tasks_cb(bot, query) # Refresh the list
+        await query.answer("This task was already completed or cancelled.", show_alert=True)
+        await query.message.delete()
+
+# --- End New Cancellation Workflow ---
+
 
 @Client.on_callback_query(filters.regex(r'^how_to_use'))
 async def how_to_use(bot, query):
