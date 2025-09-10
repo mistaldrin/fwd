@@ -360,9 +360,19 @@ async def edit_unequify_progress(msg, scanned, deleted, total, start_time, task_
         )
         button = InlineKeyboardMarkup([[InlineKeyboardButton(f"📊 Status: {percentage}%", callback_data=f'uneq_status_{task_id}')], [InlineKeyboardButton('❌ Cancel ❌', f'cancel_task_{task_id}')]])
     else:
-        text = f"✅ **Deduplication Completed!**\n\n**Scanned:** `{scanned}`\n**Duplicates Deleted:** `{deleted}`"
-        if status == "cancelled":
-            text = f"❌ **Task Cancelled!**\n\n**Scanned:** `{scanned}`\n**Duplicates Deleted:** `{deleted}`"
+        if status == "completed":
+            title = "✅ <b>Deduplication Completed!</b>"
+            line = "━━━━━━━━━━━━━━━━━━━━"
+        elif status == "cancelled":
+            title = "❌ <b>Task Cancelled!</b>"
+            line = "━━━━━━━━━━━━━━━━━━━━"
+
+        text = (
+            f"{title}\n"
+            f"{line}\n"
+            f"<b>Scanned:</b> <code>{scanned}</code>\n"
+            f"<b>Duplicates Deleted:</b> <code>{deleted}</code>"
+        )
         button = InlineKeyboardMarkup([[InlineKeyboardButton("Done!", callback_data="close_btn")]])
             
     try:
