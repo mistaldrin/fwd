@@ -19,7 +19,7 @@ logger.setLevel(logging.INFO)
 
 # --- Main Task Starter (Simplified, mr-syd Architecture) ---
 @Client.on_callback_query(filters.regex(r'^start_public'))
-asyncasync def pub_(bot, cb):
+async def pub_(bot, cb):
     user_id = cb.from_user.id
     if temp.lock.get(user_id):
         return await cb.answer("Please wait for the previous task to complete!", show_alert=True)
