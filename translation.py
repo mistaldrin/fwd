@@ -137,5 +137,3 @@ Set a custom delay between forwards. Helps avoid API limits.
 <b>Example:</b> `/forwardelay 0.5`
 
 Default is 0.5 seconds in high-speed mode."""
-
-}
