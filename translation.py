@@ -133,6 +133,8 @@ Here's the plan:
 
 Set a custom delay between forwards. Helps avoid API limits.
 
+<b>Current Delay:</b> <code>{current_delay} seconds</code>
+
 <b>Usage:</b> `/forwardelay [seconds]`
 <b>Example:</b> `/forwardelay 0.5`
 
