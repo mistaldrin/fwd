@@ -38,6 +38,7 @@ async def pub_(bot, cb):
         return await msg_edit(m, "You haven't added a bot/userbot. Please do so in /settings.", wait=True)
 
     delay = data_params.get('forward_delay', 0.5)
+    filters_to_apply = data_params.get('filters', []) # Get the filters
 
     await msg_edit(m, "Starting client...")
     try:
@@ -60,7 +61,7 @@ async def pub_(bot, cb):
     
     final_status = "error"
     forward_batch = []
-    last_update_time = time.time() # Initialize timer for dynamic updates
+    last_update_time = time.time()
 
     try:
         await edit_progress(m, sts, "running")
@@ -84,19 +85,26 @@ async def pub_(bot, cb):
                 continue
 
             for message in messages:
-                # --- DYNAMIC UPDATE LOGIC ---
                 elapsed_time = time.time() - i.start
                 update_interval = 5 if elapsed_time < 60 else 15
                 if time.time() - last_update_time > update_interval:
                     await edit_progress(m, sts, "running")
                     last_update_time = time.time()
-                # --- END DYNAMIC UPDATE LOGIC ---
                 
                 sts.add('fetched')
                 
                 if not message or message.empty or message.service:
                     sts.add('deleted')
                     continue
+                
+                # --- APPLYING MESSAGE TYPE FILTERS ---
+                if message.media and str(message.media.value) in filters_to_apply:
+                    sts.add('filtered')
+                    continue
+                if not message.media and "text" in filters_to_apply:
+                    sts.add('filtered')
+                    continue
+                # ------------------------------------
 
                 try:
                     if forward_tag:
@@ -170,11 +178,10 @@ async def get_frwd_status(bot, query):
     eta = sts.get_readable_time(int((i.total - i.fetched) / speed if speed > 0 else 0))
     percentage = "{:.2f}".format(i.fetched * 100 / i.total if i.total > 0 else 0.00)
 
-    # Using the concise status alert for the popup
     await query.answer(
         Translation.STATUS_ALERT.format(
             status=i.status, fetched=i.fetched, total=i.total, forwarded=i.total_files,
-            failed=i.failed, remaining=(i.total - i.fetched), skipped=i.deleted + i.duplicate,
+            failed=i.failed, remaining=(i.total - i.fetched), skipped=i.deleted + i.duplicate + i.filtered, # Added filtered to skipped
             percentage=percentage, eta=eta
         ),
         show_alert=True
@@ -208,7 +215,7 @@ async def edit_progress(msg, sts, status):
 
         text = Translation.TEXT.format(
             status=status, fetched=i.fetched, total=i.total, forwarded=i.total_files,
-            failed=i.failed, skipped=i.deleted, duplicates=i.duplicate,
+            failed=i.failed, skipped=i.deleted + i.filtered, duplicates=i.duplicate, # Added filtered to skipped
             percentage=percentage, eta=eta, progress_bar=progress_bar
         )
         button = InlineKeyboardMarkup([[InlineKeyboardButton(f"📊 Status: {percentage}%", callback_data=f'frwd_status_{i.id}')], [InlineKeyboardButton('❌ Cancel ❌', f'cancel_task_{i.id}')]])
