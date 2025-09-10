@@ -59,23 +59,23 @@ async def pub_(bot, cb):
     temp.forwardings += 1
     
     final_status = "error"
+    forward_batch = [] # For batching messages when using forward_tag
+
     try:
         await edit_progress(m, sts, "running")
         
         order_asc = i.start_id < i.end_id
         
-        # Use the robust iterator patched in test.py for bots, or native for userbots
         message_iterator = client.iter_messages(
             chat_id=i.FROM,
-            reverse=order_asc # True means oldest to newest
-        ) if _bot.get('is_bot', False) else client.get_chat_history(i.FROM)
+            reverse=order_asc 
+        )
 
         async for message in message_iterator:
             if temp.CANCEL.get(frwd_id):
                 final_status = "cancelled"
                 break
             
-            # This filter is crucial because the iterator might not be exact
             if not (min(i.start_id, i.end_id) <= message.id <= max(i.start_id, i.end_id)):
                 continue
 
@@ -90,16 +90,22 @@ async def pub_(bot, cb):
 
             try:
                 if forward_tag:
-                    await message.forward(chat_id=i.TO, protect_content=protect)
+                    forward_batch.append(message.id)
+                    if len(forward_batch) >= 100:
+                        await client.forward_messages(
+                            chat_id=i.TO, from_chat_id=i.FROM,
+                            message_ids=forward_batch, protect_content=protect
+                        )
+                        sts.add('total_files', len(forward_batch))
+                        forward_batch.clear()
+                        await asyncio.sleep(max(delay, 2)) # Higher delay for batches
                 else:
                     new_caption = custom_caption(message, caption)
                     await message.copy(
-                        chat_id=i.TO,
-                        caption=new_caption,
-                        reply_markup=button,
-                        protect_content=protect
+                        chat_id=i.TO, caption=new_caption,
+                        reply_markup=button, protect_content=protect
                     )
-                sts.add('total_files')
+                    sts.add('total_files')
             except FloodWait as e:
                 sts.set_status(f"floodwait ({e.value}s)")
                 await edit_progress(m, sts, sts.get('status'))
@@ -107,9 +113,13 @@ async def pub_(bot, cb):
                 sts.set_status("running")
                 try:
                     # Retry logic
-                    if forward_tag: await message.forward(chat_id=i.TO, protect_content=protect)
-                    else: await message.copy(chat_id=i.TO, caption=new_caption, reply_markup=button, protect_content=protect)
-                    sts.add('total_files')
+                    if forward_tag: 
+                        # This logic is complex to retry batches, so we skip retry for batches for stability.
+                        sts.add('failed', len(forward_batch))
+                        forward_batch.clear()
+                    else: 
+                        await message.copy(chat_id=i.TO, caption=new_caption, reply_markup=button, protect_content=protect)
+                        sts.add('total_files')
                 except Exception as e_retry:
                     logger.error(f"Retry failed for message {message.id}: {e_retry}")
                     sts.add('failed')
@@ -117,7 +127,16 @@ async def pub_(bot, cb):
                 logger.error(f"Failed to process message {message.id}: {e}", exc_info=False)
                 sts.add('failed')
 
-            await asyncio.sleep(delay)
+            if not forward_tag:
+                await asyncio.sleep(delay)
+        
+        # Forward any remaining messages in the batch after the loop
+        if forward_tag and forward_batch and not temp.CANCEL.get(frwd_id):
+            await client.forward_messages(
+                chat_id=i.TO, from_chat_id=i.FROM,
+                message_ids=forward_batch, protect_content=protect
+            )
+            sts.add('total_files', len(forward_batch))
 
         if not temp.CANCEL.get(frwd_id):
             final_status = "completed"
@@ -237,4 +256,3 @@ def get_size(size):
 
 def retry_btn(id):
     return InlineKeyboardMarkup([[InlineKeyboardButton('Retry', f"start_public_{id}")]])
-
