@@ -108,8 +108,13 @@ async def forward_delay(client, message):
     if ban_status["is_banned"]:
         return await message.reply_text(f"Access denied.\n\nReason: {ban_status['ban_reason']}")
 
+    # Get current configs first to display the existing value
+    user_configs = await db.get_configs(user_id)
+    current_delay = user_configs.get('forward_delay', 0.5)
+
     if len(message.command) < 2:
-        return await message.reply_text(Translation.FORWARDELAY_TXT)
+        # If no new value is provided, show the help text with the current delay
+        return await message.reply_text(Translation.FORWARDELAY_TXT.format(current_delay=current_delay))
     
     try:
         delay = float(message.command[1])
@@ -117,7 +122,7 @@ async def forward_delay(client, message):
             return await message.reply_text("The delay must be a positive number.")
         
         await update_configs(user_id, 'forward_delay', delay)
-        await message.reply_text(f"Forwarding delay set to {delay} seconds.")
+        await message.reply_text(f"✅ Forwarding delay has been updated to **{delay} seconds**.")
     except ValueError:
         await message.reply_text("Invalid input. Please provide a number (e.g., `0.5`, `1`, `2`).")
 
