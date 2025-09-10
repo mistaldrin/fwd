@@ -1,3 +1,11 @@
+
+
+FINAL ITERATION OF DAWN
+WORKING /FORWARD & /UNEQUIFY
+MOST CMDS WORK...
+BACKUP COPY BRANCH...
+
+
 Has message type selection for unequify. can take parameters for /unequify or choose via chat list.
 
 has /tasks for running tsks (cancellable).
