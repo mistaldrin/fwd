@@ -17,7 +17,7 @@ CLIENT = CLIENT()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# --- Main Task Starter (Simplified, mr-syd Architecture) ---
+# --- Main Task Starter ---
 @Client.on_callback_query(filters.regex(r'^start_public'))
 async def pub_(bot, cb):
     user_id = cb.from_user.id
@@ -63,74 +63,77 @@ async def pub_(bot, cb):
 
     try:
         await edit_progress(m, sts, "running")
-        
-        order_asc = i.start_id < i.end_id
-        
-        message_iterator = client.iter_messages(
-            chat_id=i.FROM,
-            reverse=order_asc 
-        )
 
-        async for message in message_iterator:
+        # --- Stable Message Fetching Logic ---
+        start, end = (i.start_id, i.end_id) if i.start_id < i.end_id else (i.end_id, i.start_id)
+        message_ids = list(range(start, end + 1))
+
+        for chunk_start in range(0, len(message_ids), 200):
             if temp.CANCEL.get(frwd_id):
                 final_status = "cancelled"
                 break
             
-            if not (min(i.start_id, i.end_id) <= message.id <= max(i.start_id, i.end_id)):
-                continue
-
-            sts.add('fetched')
+            chunk = message_ids[chunk_start:chunk_start+200]
             
-            if sts.get('fetched') % 20 == 0:
-                await edit_progress(m, sts, "running")
-
-            if not message or message.empty or message.service:
-                sts.add('deleted')
+            try:
+                messages = await client.get_messages(i.FROM, chunk)
+            except Exception as e_fetch:
+                logger.error(f"Could not fetch message chunk {chunk}: {e_fetch}")
+                sts.add('failed', len(chunk))
+                sts.add('fetched', len(chunk)) # Count as fetched even if failed
                 continue
 
-            try:
-                if forward_tag:
-                    forward_batch.append(message.id)
-                    if len(forward_batch) >= 100:
-                        await client.forward_messages(
-                            chat_id=i.TO, from_chat_id=i.FROM,
-                            message_ids=forward_batch, protect_content=protect
-                        )
-                        sts.add('total_files', len(forward_batch))
-                        forward_batch.clear()
-                        await asyncio.sleep(max(delay, 2)) # Higher delay for batches
-                else:
-                    new_caption = custom_caption(message, caption)
-                    await message.copy(
-                        chat_id=i.TO, caption=new_caption,
-                        reply_markup=button, protect_content=protect
-                    )
-                    sts.add('total_files')
-            except FloodWait as e:
-                sts.set_status(f"floodwait ({e.value}s)")
-                await edit_progress(m, sts, sts.get('status'))
-                await asyncio.sleep(e.value + 2)
-                sts.set_status("running")
-                try:
-                    # Retry logic
-                    if forward_tag: 
-                        # This logic is complex to retry batches, so we skip retry for batches for stability.
-                        sts.add('failed', len(forward_batch))
-                        forward_batch.clear()
-                    else: 
-                        await message.copy(chat_id=i.TO, caption=new_caption, reply_markup=button, protect_content=protect)
-                        sts.add('total_files')
-                except Exception as e_retry:
-                    logger.error(f"Retry failed for message {message.id}: {e_retry}")
-                    sts.add('failed')
-            except Exception as e:
-                logger.error(f"Failed to process message {message.id}: {e}", exc_info=False)
-                sts.add('failed')
+            for message in messages:
+                if sts.get('fetched') % 20 == 0:
+                    await edit_progress(m, sts, "running")
+                
+                sts.add('fetched')
+                
+                if not message or message.empty or message.service:
+                    sts.add('deleted')
+                    continue
 
-            if not forward_tag:
-                await asyncio.sleep(delay)
+                try:
+                    if forward_tag:
+                        forward_batch.append(message.id)
+                        if len(forward_batch) >= 100:
+                            await client.forward_messages(
+                                chat_id=i.TO, from_chat_id=i.FROM,
+                                message_ids=forward_batch, protect_content=protect
+                            )
+                            sts.add('total_files', len(forward_batch))
+                            forward_batch.clear()
+                            await asyncio.sleep(max(delay, 2)) # Higher delay for batches
+                    else:
+                        new_caption = custom_caption(message, caption)
+                        await message.copy(
+                            chat_id=i.TO, caption=new_caption,
+                            reply_markup=button, protect_content=protect
+                        )
+                        sts.add('total_files')
+                except FloodWait as e:
+                    sts.set_status(f"floodwait ({e.value}s)")
+                    await edit_progress(m, sts, sts.get('status'))
+                    await asyncio.sleep(e.value + 2)
+                    sts.set_status("running")
+                    try:
+                        # Retry logic
+                        if forward_tag: 
+                            sts.add('failed', len(forward_batch))
+                            forward_batch.clear()
+                        else: 
+                            await message.copy(chat_id=i.TO, caption=new_caption, reply_markup=button, protect_content=protect)
+                            sts.add('total_files')
+                    except Exception as e_retry:
+                        logger.error(f"Retry failed for message {message.id}: {e_retry}")
+                        sts.add('failed')
+                except Exception as e:
+                    logger.error(f"Failed to process message {message.id}: {e}", exc_info=False)
+                    sts.add('failed')
+
+                if not forward_tag:
+                    await asyncio.sleep(delay)
         
-        # Forward any remaining messages in the batch after the loop
         if forward_tag and forward_batch and not temp.CANCEL.get(frwd_id):
             await client.forward_messages(
                 chat_id=i.TO, from_chat_id=i.FROM,
