@@ -127,19 +127,25 @@ async def stateful_message_handler(bot: Client, message: Message):
         value_type = state_info.get("value_type")
         session = temp.RANGE_SESSIONS.get(session_id)
 
-        try: await bot.delete_messages(user_id, prompt_id)
-        except Exception: pass
+        try:
+            await bot.delete_messages(user_id, prompt_id)
+            await message.delete()
+        except Exception:
+            pass
         
         temp.USER_STATES.pop(user_id, None)
 
-        if not session: return await message.reply("Your session has expired. Please start over.")
+        if not session:
+            return await bot.send_message(user_id, "Your session has expired. Please start over.")
 
         if message.text and message.text.isdigit():
             session[f'{value_type}_id'] = int(message.text)
-            await update_range_message(bot, session_id, message_to_edit=message)
+            # A new message will be sent by update_range_message
+            await update_range_message(bot, session_id)
         else:
-            await message.reply("Invalid ID provided. The process has been cancelled.")
+            await bot.send_message(user_id, "Invalid ID provided. The process has been cancelled.")
             temp.RANGE_SESSIONS.pop(session_id, None)
+
 
     elif current_state == "awaiting_channel_forward":
         try: await bot.delete_messages(user_id, state_info["prompt_message_id"])
