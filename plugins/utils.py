@@ -9,6 +9,7 @@ from config import temp
 from translation import Translation
 from .test import parse_buttons
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
+from pyrogram.errors import MessageNotModified
 
 STATUS = {}
 SYD = ["https://files.catbox.moe/3lwlbm.png"]
@@ -132,12 +133,13 @@ async def start_range_selection(bot, message: Message, from_chat_id, from_title,
         'end_id': end_id,
         'order': 'asc',
         'final_callback': final_callback_prefix,
-        'original_message_id': message.id
+        'original_message_id': message.id,
+        'message_id': None # To store the ID of the menu message
     }
     await update_range_message(bot, session_id)
 
 async def update_range_message(bot, session_id, message_to_edit=None):
-    """Edits or sends the range selection message as a text message."""
+    """Edits or sends the range selection message."""
     session = temp.RANGE_SESSIONS.get(session_id)
     if not session: return
 
@@ -161,10 +163,17 @@ async def update_range_message(bot, session_id, message_to_edit=None):
     
     reply_markup = InlineKeyboardMarkup(buttons)
     
+    message_id_to_edit = message_to_edit.id if message_to_edit else session.get('message_id')
+    
     try:
-        if message_to_edit:
-            new_message = await message_to_edit.edit_text(text=text, reply_markup=reply_markup)
-        else:
+        if message_id_to_edit:
+            new_message = await bot.edit_message_text(
+                chat_id=session['chat_id'],
+                message_id=message_id_to_edit,
+                text=text,
+                reply_markup=reply_markup
+            )
+        else: # If no message to edit, send a new one
             new_message = await bot.send_message(
                 chat_id=session['chat_id'],
                 text=text,
@@ -172,9 +181,18 @@ async def update_range_message(bot, session_id, message_to_edit=None):
                 reply_to_message_id=session['original_message_id']
             )
         session['message_id'] = new_message.id
+    except MessageNotModified:
+        pass # It's okay if the message is the same
     except Exception as e:
-        logger.error(f"Error sending/editing range message: {e}", exc_info=True)
+        logger.error(f"Error editing range message, sending new one: {e}", exc_info=False)
         try:
-            await bot.send_message(session['chat_id'], "An error occurred while displaying the menu. Please try again.")
+            # Fallback to sending a new message if editing fails
+            new_message = await bot.send_message(
+                chat_id=session['chat_id'],
+                text=text,
+                reply_markup=reply_markup,
+                reply_to_message_id=session['original_message_id']
+            )
+            session['message_id'] = new_message.id
         except Exception as ie:
-            logger.error(f"Failed to send error message to user: {ie}")
+            logger.error(f"Failed to send fallback range message: {ie}")
