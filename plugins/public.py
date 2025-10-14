@@ -8,15 +8,13 @@ from .utils import STS, start_range_selection, update_range_message
 from database import db
 from config import temp
 from translation import Translation
-from .test import CLIENT
-# --- Import the necessary function from unequify ---
+from .test import CLIENT, update_configs
 from .unequify import process_unequify_target
 from pyrogram import Client, filters, enums
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery, Message
 
 logger = logging.getLogger(__name__)
 
-# --- Helper Functions ---
 def parse_message_input(message):
     """Parses a forwarded message or a message link."""
     if not message or (not message.text and not message.forward_date):
@@ -25,8 +23,7 @@ def parse_message_input(message):
     if message.text and not message.forward_date:
         regex = re.compile(r"(https://)?(t\.me/|telegram\.me/|telegram\.dog/)(c/)?(\d+|[a-zA-Z_0-9]+)/(\d+)$")
         match = regex.match(message.text.replace("?single", ""))
-        if not match:
-            return None, None, 'Invalid Link.'
+        if not match: return None, None, 'Invalid Link.'
         chat_id_str, msg_id = match.group(4), int(match.group(5))
         chat_id = int(("-100" + chat_id_str)) if chat_id_str.isnumeric() else chat_id_str
         return chat_id, msg_id, None
@@ -36,8 +33,6 @@ def parse_message_input(message):
     else:
         return None, None, "Invalid input. Please forward from a channel or provide a valid message link."
 
-# --- Main /forward Command Flow ---
-
 @Client.on_message(filters.private & filters.command(["fwd", "forward"]))
 async def run(bot, message):
     user_id = message.from_user.id
@@ -45,7 +40,6 @@ async def run(bot, message):
         return await message.reply("A task is already in progress. Please wait for it to complete before starting a new one.")
     
     temp.USER_STATES.pop(user_id, None)
-
     bots = await db.get_bots(user_id)
     if not bots:
         return await message.reply("Add a bot or userbot to proceed. ( >⁠.⁠< ) --> /settings")
@@ -81,13 +75,8 @@ async def cb_select_target(bot, query):
     to_chat_id = int(query.data.split('_')[-1])
     
     prompt_message = await query.message.edit_text(Translation.FROM_MSG)
-    temp.USER_STATES[user_id] = {
-        "state": "awaiting_source",
-        "to_chat_id": to_chat_id,
-        "prompt_message_id": prompt_message.id
-    }
+    temp.USER_STATES[user_id] = {"state": "awaiting_source", "to_chat_id": to_chat_id, "prompt_message_id": prompt_message.id}
 
-# --- High-Priority Stateful Message Handler ---
 @Client.on_message(filters.private & filters.incoming, group=-1)
 async def stateful_message_handler(bot: Client, message: Message):
     if message.edit_date: return
@@ -96,179 +85,124 @@ async def stateful_message_handler(bot: Client, message: Message):
     state_info = temp.USER_STATES.get(user_id)
     if not state_info: return
 
+    current_state = state_info.get("state")
+    prompt_id = state_info.get("prompt_message_id")
+
+    # Universal /cancel
     if message.text and message.text.lower() == "/cancel":
-        prompt_id = state_info.get("prompt_message_id")
         if prompt_id:
             try: await bot.delete_messages(user_id, prompt_id)
             except Exception: pass
         temp.USER_STATES.pop(user_id, None)
         return await message.reply(Translation.CANCEL)
 
-    current_state = state_info.get("state")
+    # Clean up prompts and user message
+    if prompt_id:
+        try: await bot.delete_messages(user_id, prompt_id)
+        except: pass
+    try: await message.delete()
+    except: pass
+    
+    temp.USER_STATES.pop(user_id, None)
 
+    # --- FORWARDING WORKFLOW ---
     if current_state == "awaiting_source":
-        try: await bot.delete_messages(user_id, state_info["prompt_message_id"])
-        except Exception: pass
-        
         to_chat_id = state_info["to_chat_id"]
         from_chat_id, end_id, error = parse_message_input(message)
-        
-        temp.USER_STATES.pop(user_id, None)
-        if error: return await message.reply(error)
-
+        if error: return await bot.send_message(user_id, error)
         try: from_title = (await bot.get_chat(from_chat_id)).title
         except Exception: from_title = "Private/Unknown Chat"
-        
         await start_range_selection(bot, message, from_chat_id, from_title, to_chat_id, 1, end_id)
 
     elif current_state == "awaiting_range_edit":
-        prompt_id = state_info.get("prompt_message_id")
-        session_id = state_info.get("session_id")
-        value_type = state_info.get("value_type")
+        session_id, value_type = state_info.get("session_id"), state_info.get("value_type")
         session = temp.RANGE_SESSIONS.get(session_id)
-
-        try:
-            await bot.delete_messages(user_id, prompt_id)
-            await message.delete()
-        except Exception:
-            pass
-        
-        temp.USER_STATES.pop(user_id, None)
-
-        if not session:
-            return await bot.send_message(user_id, "Your session has expired. Please start over.")
-
+        if not session: return await bot.send_message(user_id, "Your session has expired. Please start over.")
         if message.text and message.text.isdigit():
             session[f'{value_type}_id'] = int(message.text)
-            # A new message will be sent by update_range_message
             await update_range_message(bot, session_id)
         else:
             await bot.send_message(user_id, "Invalid ID provided. The process has been cancelled.")
             temp.RANGE_SESSIONS.pop(session_id, None)
 
-
+    # --- SETTINGS WORKFLOW ---
     elif current_state == "awaiting_channel_forward":
-        try: await bot.delete_messages(user_id, state_info["prompt_message_id"])
-        except Exception: pass
-
-        temp.USER_STATES.pop(user_id, None)
-        
-        if not message.forward_date:
-            return await message.reply("Not a forwarded message. (・_・;)\nProcess cancelled.")
-
+        if not message.forward_date: return await bot.send_message(user_id, "Not a forwarded message. (・_・;)\nProcess cancelled.")
         chat_id, title = message.forward_from_chat.id, message.forward_from_chat.title
         username = f"@{message.forward_from_chat.username}" if message.forward_from_chat.username else "private"
-
-        if await db.in_channel(user_id, chat_id):
-            await message.reply("This channel has already been added.")
-        else:
-            await db.add_channel(user_id, chat_id, title, username)
-            await message.reply("Channel added. ✓")
+        if await db.in_channel(user_id, chat_id): await bot.send_message(user_id, "This channel has already been added.")
+        else: await db.add_channel(user_id, chat_id, title, username); await bot.send_message(user_id, "Channel added. ✓")
     
     elif current_state == "awaiting_bot_token":
-        temp.USER_STATES.pop(user_id, None)
         await CLIENT().add_bot(bot, message)
-
+    
     elif current_state == "awaiting_user_session":
-        temp.USER_STATES.pop(user_id, None)
         await CLIENT().add_session(bot, message)
 
-    # --- FIXED UNEQIFY LOGIC ---
+    elif current_state and current_state.startswith("awaiting_setting_"):
+        setting_key = current_state.split("awaiting_setting_")[1]
+        value = None
+        if message.text.lower() == "/reset": value = None
+        elif setting_key == "file_size":
+            try: value = float(message.text) * 1024 * 1024 # MB to bytes
+            except ValueError: return await bot.send_message(user_id, "Invalid number for file size.")
+        elif setting_key == "size_limit":
+            if message.text.lower() not in ["above", "below"]: return await bot.send_message(user_id, "Invalid option. Please enter 'above' or 'below'.")
+            value = message.text.lower()
+        else: value = message.text
+        await update_configs(user_id, setting_key, value)
+        await bot.send_message(user_id, f"✅ **{setting_key.replace('_', ' ').title()}** has been updated.")
+
+    # --- UNEQIFY WORKFLOW ---
     elif current_state == "awaiting_unequify_manual_target":
-        prompt_id = state_info.get("prompt_message_id")
-        if prompt_id:
-            try: await bot.delete_messages(user_id, prompt_id)
-            except: pass
-        
         userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
-        if not userbot_id: return await message.reply("Error: Userbot selection lost. Please start over.")
-        
-        temp.USER_STATES.pop(user_id, None)
+        if not userbot_id: return await bot.send_message(user_id, "Error: Userbot selection lost. Please start over.")
         await process_unequify_target(bot, message, user_id, userbot_id, message.text)
 
     elif current_state == "awaiting_unequify_chat_selection":
-        prompt_message = state_info.get("prompt_message")
-        if prompt_message:
-            try: await prompt_message.delete()
-            except: pass
-        
-        chats = state_info.get("chats", {})
-        user_input = message.text.strip()
+        chats, user_input = state_info.get("chats", {}), message.text.strip()
         selected_chat = chats.get(user_input)
-
-        if not selected_chat:
-            temp.USER_STATES.pop(user_id, None)
-            return await message.reply("Invalid selection. Please start the /unequify process again.")
-        
+        if not selected_chat: return await bot.send_message(user_id, "Invalid selection. Please start the /unequify process again.")
         userbot_id = temp.UNEQUIFY_USERBOT_ID.get(user_id)
-        if not userbot_id: return await message.reply("Error: Userbot selection lost. Please start over.")
-
-        temp.USER_STATES.pop(user_id, None)
+        if not userbot_id: return await bot.send_message(user_id, "Error: Userbot selection lost. Please start over.")
         await process_unequify_target(bot, message, user_id, userbot_id, selected_chat.id)
 
-
-# --- Callbacks for Interactive Range Selection ---
 @Client.on_callback_query(filters.regex(r"^range_"))
 async def range_selection_callbacks(bot, query):
     user_id = query.from_user.id
     parts = query.data.split("_")
     action, session_id = parts[1], parts[-1]
-
     session = temp.RANGE_SESSIONS.get(session_id)
     if not session or session['user_id'] != user_id:
         return await query.answer("This is not for you, or the session has expired.", show_alert=True)
-
-    if action == "info":
-        await query.answer("Displays the current range and order selection.", show_alert=False)
-    
-    elif action == "cancel":
+    if action == "cancel":
         temp.RANGE_SESSIONS.pop(session_id, None)
-        await query.message.delete()
-        await bot.send_message(user_id, "Operation cancelled.")
-    
+        await query.message.delete(); await bot.send_message(user_id, "Operation cancelled.")
     elif action == "swap":
         session['order'] = 'desc' if session['order'] == 'asc' else 'asc'
         session['start_id'], session['end_id'] = session['end_id'], session['start_id']
-        await update_range_message(bot, session_id, message_to_edit=query.message)
-        await query.answer(f"Order swapped!")
-    
+        await update_range_message(bot, session_id, message_to_edit=query.message); await query.answer(f"Order swapped!")
     elif action == "edit":
         value_type = parts[2]
         await query.message.delete()
         prompt = await bot.send_message(user_id, f"Send the new **{value_type.upper()} ID**.")
-        # SET THE STATE to wait for the user's next message
-        temp.USER_STATES[user_id] = {
-            "state": "awaiting_range_edit",
-            "session_id": session_id,
-            "value_type": value_type,
-            "prompt_message_id": prompt.id
-        }
-    
+        temp.USER_STATES[user_id] = {"state": "awaiting_range_edit", "session_id": session_id, "value_type": value_type, "prompt_message_id": prompt.id}
     elif action == "confirm":
         await query.message.delete()
         final_callback = session.get('final_callback')
-        if final_callback == 'fwd_final':
-            await show_final_confirmation(bot, session_id)
-        elif final_callback == 'uneq_final':
-            from plugins.unequify import prompt_type_selection
-            await prompt_type_selection(bot, query, session_id)
-
+        if final_callback == 'fwd_final': await show_final_confirmation(bot, session_id)
+        elif final_callback == 'uneq_final': from plugins.unequify import prompt_type_selection; await prompt_type_selection(bot, query, session_id)
 
 async def show_final_confirmation(bot, session_id):
     session = temp.RANGE_SESSIONS.get(session_id)
     if not session: return
-
     user_id, bot_id = session['user_id'], temp.FORWARD_BOT_ID.get(session['user_id'])
     if not bot_id: return await bot.send_message(user_id, "Error: Bot selection lost.")
-
     _bot, channels = await db.get_bot(user_id, bot_id), await db.get_user_channels(user_id)
     to_title = next((c['title'] for c in channels if c['chat_id'] == session['to_chat_id']), 'Unknown')
-    
     message_range_text = f"{min(session['start_id'], session['end_id'])} to {max(session['start_id'], session['end_id'])}"
     forward_id = str(uuid4())
-
     STS(forward_id).store(From=session['from_chat_id'], to=session['to_chat_id'], start_id=session['start_id'], end_id=session['end_id'])
-
     await bot.send_message(user_id, Translation.DOUBLE_CHECK.format(
             botname=_bot.get('name', 'N/A'), botuname=_bot.get('username', ''),
             from_chat=session['from_title'], to_chat=to_title, message_range=message_range_text),
