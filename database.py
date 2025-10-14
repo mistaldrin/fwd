@@ -28,9 +28,8 @@ class Database:
         self.db = self._client[database_name]
         self.bot = self.db.bots
         self.col = self.db.user
-        self.nfy = self.db.notify
         self.chl = self.db.channels
-        self.tasks = self.db.tasks # New collection for active tasks
+        self.tasks = self.db.tasks # Collection for active tasks
 
     def new_user(self, id, name):
         return dict(
@@ -91,20 +90,16 @@ class Database:
         
     async def reset_user_data(self, user_id):
         """ Resets a user's entire configuration to default. """
-        # Delete user's main config, bots, and channels
         user_doc = await self.col.find_one_and_delete({'id': int(user_id)})
         await self.bot.delete_many({'user_id': int(user_id)})
         await self.chl.delete_many({'user_id': int(user_id)})
         
-        # Re-add the user with a fresh document if they existed
         if user_doc:
              await self.add_user(user_id, user_doc.get('name', str(user_id)))
-
 
     async def get_banned(self):
         users = self.col.find({'ban_status.is_banned': True})
         b_users = [user['id'] async for user in users]
-        # Also update the temp list on startup
         temp.BANNED_USERS = b_users
         return b_users
 
@@ -113,44 +108,24 @@ class Database:
 
     async def get_configs(self, id):
         default = {
-            'caption': None,
-            'duplicate': True,
-            'forward_tag': False,
-            'file_size': 0,
-            'size_limit': None,
-            'extension': None,
-            'keywords': None,
-            'protect': None,
-            'button': None,
-            'db_uri': None,
-            'forward_delay': 1.0, # Added default for forward_delay
+            'caption': None, 'duplicate': True, 'forward_tag': False, 'file_size': 0,
+            'size_limit': None, 'extension': None, 'keywords': None, 'protect': None,
+            'button': None, 'db_uri': None, 'forward_delay': 1.0,
             'filters': {
-               'poll': True,
-               'text': True,
-               'audio': True,
-               'voice': True,
-               'video': True,
-               'photo': True,
-               'document': True,
-               'animation': True,
-               'sticker': True
+               'poll': True, 'text': True, 'audio': True, 'voice': True, 'video': True,
+               'photo': True, 'document': True, 'animation': True, 'sticker': True
             }
         }
         user = await self.col.find_one({'id':int(id)})
         if user:
-            # Merge stored configs with default to prevent KeyErrors on missing keys
             user_configs = user.get('configs', {})
-            # The default dictionary is the base
             final_configs = default.copy()
-            # Update with user's saved settings
             final_configs.update(user_configs)
-            # Ensure nested 'filters' dictionary is also merged
             if 'filters' in user_configs:
                 final_configs['filters'] = default['filters'].copy()
                 final_configs['filters'].update(user_configs['filters'])
             return final_configs
         return default
-
 
     async def add_bot(self, datas):
        await self.bot.insert_one(datas)
@@ -175,15 +150,12 @@ class Database:
        return bool(channel)
 
     async def add_channel(self, user_id: int, chat_id: int, title, username):
-       # Check if the channel already exists for this user
        if await self.in_channel(user_id, chat_id):
            return False
-       # Add the channel if it does not exist
        return await self.chl.insert_one({"user_id": user_id, "chat_id": chat_id, "title": title, "username": username})
 
     async def remove_channel(self, user_id: int, chat_id: int):
-       channel = await self.in_channel(user_id, chat_id )
-       if not channel:
+       if not await self.in_channel(user_id, chat_id):
          return False
        return await self.chl.delete_many({"user_id": int(user_id), "chat_id": int(chat_id)})
 
@@ -196,25 +168,19 @@ class Database:
 
     async def get_filters(self, user_id):
        filters = []
-       filter = (await self.get_configs(user_id))['filters']
-       for k, v in filter.items():
-          if v == False:
+       filter_config = (await self.get_configs(user_id))['filters']
+       for k, v in filter_config.items():
+          if not v:
             filters.append(str(k))
        return filters
 
-    async def add_frwd(self, user_id, task_details):
-        task_details['user_id'] = int(user_id)
-        return await self.tasks.insert_one(task_details)
+    # --- Task management for resume feature ---
+    async def save_task(self, task_id, task_data):
+        task_data['id'] = task_id
+        await self.tasks.update_one({'id': task_id}, {'$set': task_data}, upsert=True)
 
-    async def rmve_frwd(self, user_id=0, task_id=None, all=False):
-        query = {}
-        if all:
-            pass
-        elif task_id:
-            query = {'id': task_id}
-        elif user_id:
-            query = {'user_id': int(user_id)}
-        return await self.tasks.delete_many(query)
+    async def delete_task(self, task_id):
+        await self.tasks.delete_one({'id': task_id})
 
-    async def get_all_frwd(self):
+    async def get_all_tasks(self):
         return self.tasks.find({})
