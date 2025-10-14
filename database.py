@@ -30,6 +30,7 @@ class Database:
         self.col = self.db.user
         self.nfy = self.db.notify
         self.chl = self.db.channels
+        self.tasks = self.db.tasks # New collection for active tasks
 
     def new_user(self, id, name):
         return dict(
@@ -201,12 +202,19 @@ class Database:
             filters.append(str(k))
        return filters
 
-    async def add_frwd(self, user_id):
-       return await self.nfy.insert_one({'user_id': int(user_id)})
+    async def add_frwd(self, user_id, task_details):
+        task_details['user_id'] = int(user_id)
+        return await self.tasks.insert_one(task_details)
 
-    async def rmve_frwd(self, user_id=0, all=False):
-       data = {} if all else {'user_id': int(user_id)}
-       return await self.nfy.delete_many(data)
+    async def rmve_frwd(self, user_id=0, task_id=None, all=False):
+        query = {}
+        if all:
+            pass
+        elif task_id:
+            query = {'id': task_id}
+        elif user_id:
+            query = {'user_id': int(user_id)}
+        return await self.tasks.delete_many(query)
 
     async def get_all_frwd(self):
-       return self.nfy.find({})
+        return self.tasks.find({})
