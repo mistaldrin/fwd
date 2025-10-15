@@ -21,7 +21,6 @@ async def run_forwarding_task(bot, user_id, frwd_id, bot_id, sts, message_obj):
     """The core logic for processing and forwarding messages."""
     i = sts.get(full=True)
     
-    # Lock the user and increment forwarding count
     temp.lock[user_id] = True
     temp.forwardings += 1
     
@@ -51,17 +50,19 @@ async def run_forwarding_task(bot, user_id, frwd_id, bot_id, sts, message_obj):
 
         await edit_progress(message_obj, sts, "running")
         
-        start_id = min(i.start_id, i.end_id) + i.fetched
+        start_id = min(i.start_id, i.end_id)
         end_id = max(i.start_id, i.end_id)
-        message_ids = list(range(start_id, end_id + 1))
+        current_id_to_process = start_id + i.fetched
 
-        for chunk_start in range(0, len(message_ids), 200):
+        # Loop directly over message IDs in chunks, improving memory efficiency
+        for chunk_base_id in range(current_id_to_process, end_id + 1, 200):
             if temp.CANCEL.get(frwd_id):
                 final_status = "cancelled"
                 break
             
-            chunk = message_ids[chunk_start:chunk_start+200]
-            
+            chunk = list(range(chunk_base_id, min(chunk_base_id + 200, end_id + 1)))
+            if not chunk: continue
+
             try:
                 messages = await client_instance.get_messages(i.FROM, chunk)
             except Exception as e_fetch:
@@ -96,10 +97,11 @@ async def run_forwarding_task(bot, user_id, frwd_id, bot_id, sts, message_obj):
                     logger.error(f"Failed to process message {message.id}: {e}", exc_info=False)
                     sts.add('failed')
 
-                if sts.get('fetched') % 20 == 0:
-                    await db.save_task(frwd_id, {'fetched': sts.get('fetched')})
                 if not forward_tag: await asyncio.sleep(delay)
-        
+            
+            # Save progress at the end of each chunk for better resume accuracy
+            await db.save_task(frwd_id, {'fetched': sts.get('fetched')})
+
         if forward_tag and forward_batch and not temp.CANCEL.get(frwd_id):
             await client_instance.forward_messages(chat_id=i.TO, from_chat_id=i.FROM, message_ids=forward_batch, protect_content=protect)
             sts.add('total_files', len(forward_batch))
