@@ -165,9 +165,8 @@ async def get_configs(user_id):
 async def update_configs(user_id, key, value):
     """Updates a specific configuration key for a user."""
     current = await db.get_configs(user_id)
-    if key in ['caption', 'duplicate', 'db_uri', 'forward_tag', 'protect', 'file_size', 'size_limit', 'extension', 'keywords', 'button', 'forward_delay']:
+    if key in ['caption', 'duplicate', 'db_uri', 'forward_tag', 'protect', 'file_size', 'size_limit', 'extension', 'keywords', 'button', 'forward_delay', 'filters']:
        current[key] = value
     elif key in current.get('filters', {}):
        current['filters'][key] = value
     await db.update_configs(user_id, current)
-
